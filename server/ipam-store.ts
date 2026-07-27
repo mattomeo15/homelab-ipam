@@ -181,6 +181,138 @@ export class IPAMStore {
     this.seedDefaults();
   }
 
+  public importMarkdown(markdownText: string): number {
+    if (!markdownText) return 0;
+    const lines = markdownText.split('\n');
+    let currentCategory: IPRecord['typeTag'] = 'Unassigned';
+    let importedCount = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Detect section categories, e.g., "## Gateway / Router"
+      if (line.startsWith('##')) {
+        const title = line.replace(/^##\s*/, '').trim().toLowerCase();
+        if (title.includes('gateway') || title.includes('router')) {
+          currentCategory = 'Gateway / Router';
+        } else if (title.includes('macvlan')) {
+          currentCategory = 'Macvlan Container';
+        } else if (title.includes('shared') || title.includes('host container')) {
+          currentCategory = 'Shared/Host Container';
+        } else if (title.includes('infrastructure')) {
+          currentCategory = 'Infrastructure';
+        } else if (title.includes('physical') || title.includes('hardware')) {
+          currentCategory = 'Physical Hardware';
+        } else if (title.includes('unassigned')) {
+          currentCategory = 'Unassigned';
+        }
+        continue;
+      }
+
+      // Check for table rows containing 192.168.
+      if (line.startsWith('|') && (line.includes('192.168.2.') || line.includes('192.168.'))) {
+        const parts = line.split('|').map((p) => p.trim());
+        if (parts.length >= 7) {
+          const ipRaw = parts[1].replace(/[`*]/g, '').trim();
+          if (!ipRaw.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+            continue;
+          }
+
+          const hostnameRaw = parts[2].replace(/[`*]/g, '').trim();
+          const statusRaw = parts[3].replace(/[`*]/g, '').trim() as IPRecord['status'];
+          const servicesRaw = parts[4].trim();
+          const macRaw = parts[5].replace(/[`*]/g, '').trim();
+          const notesRaw = parts[6].replace(/[`*]/g, '').trim();
+
+          const hostname = (hostnameRaw === '-' || hostnameRaw === '') ? '' : hostnameRaw;
+          const macAddress = (macRaw === '-' || macRaw === '') ? '' : macRaw;
+          const notes = (notesRaw === '-' || notesRaw === '') ? '' : notesRaw;
+          const status = (statusRaw === 'Active' || statusRaw === 'Reserved' || statusRaw === 'Free') ? statusRaw : 'Active';
+
+          // Parse nested services
+          const parsedServices: ServiceItem[] = [];
+          if (servicesRaw && servicesRaw !== '*None*' && servicesRaw !== '-' && servicesRaw !== '') {
+            const svcItems: string[] = [];
+            let temp = '';
+            let openBrackets = 0;
+            let openParens = 0;
+            for (let j = 0; j < servicesRaw.length; j++) {
+              const char = servicesRaw[j];
+              if (char === '[') openBrackets++;
+              else if (char === ']') openBrackets--;
+              else if (char === '(') openParens++;
+              else if (char === ')') openParens--;
+
+              if (char === ',' && openBrackets === 0 && openParens === 0) {
+                svcItems.push(temp.trim());
+                temp = '';
+              } else {
+                temp += char;
+              }
+            }
+            if (temp.trim() !== '') {
+              svcItems.push(temp.trim());
+            }
+
+            svcItems.forEach((item, idx) => {
+              const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+              let label = item;
+              let url = '';
+              if (linkMatch) {
+                label = linkMatch[1];
+                url = linkMatch[2];
+              }
+
+              const portMatch = label.match(/(.*?)\s*\((?::)?(\d+)\)/);
+              let serviceName = label;
+              let port = 80;
+              if (portMatch) {
+                serviceName = portMatch[1].trim();
+                port = parseInt(portMatch[2], 10);
+              }
+
+              let protocol: 'http' | 'https' | 'tcp' = 'tcp';
+              if (url.startsWith('https://')) {
+                protocol = 'https';
+              } else if (url.startsWith('http://')) {
+                protocol = 'http';
+              }
+
+              parsedServices.push({
+                id: `svc-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+                name: serviceName,
+                port,
+                protocol,
+                url,
+                autoDiscovered: true
+              });
+            });
+          }
+
+          const existing = this.records.get(ipRaw);
+          const finalRecord: IPRecord = {
+            ip: ipRaw,
+            hostname: hostname || (existing ? existing.hostname : ''),
+            status,
+            typeTag: currentCategory,
+            macAddress: macAddress || (existing ? existing.macAddress : ''),
+            notes: notes || (existing ? existing.notes : ''),
+            services: parsedServices.length > 0 ? parsedServices : (existing ? existing.services : []),
+            lastSeen: status === 'Active' ? 'Active now' : undefined
+          };
+
+          this.records.set(ipRaw, finalRecord);
+          importedCount++;
+        }
+      }
+    }
+
+    if (importedCount > 0) {
+      this.saveData();
+    }
+    return importedCount;
+  }
+
   public saveData() {
     try {
       const arr = Array.from(this.records.values());

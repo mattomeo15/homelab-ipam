@@ -39,6 +39,19 @@ async function startServer() {
     res.json(getScanProgress());
   });
 
+  app.post('/api/import/md', (req, res) => {
+    const { markdown } = req.body;
+    if (!markdown) {
+      return res.status(400).json({ error: 'Markdown text is required' });
+    }
+    try {
+      const count = store.importMarkdown(markdown);
+      res.json({ success: true, count, message: `Successfully imported ${count} device records from Markdown.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/clear', (req, res) => {
     store.clearAll();
     res.json({ message: 'All saved IPAM data has been cleared successfully' });

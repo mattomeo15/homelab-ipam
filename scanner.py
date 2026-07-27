@@ -2,6 +2,7 @@ import asyncio
 import socket
 import re
 import os
+import struct
 import aiohttp
 from typing import List, Dict, Any, Optional
 
@@ -12,6 +13,7 @@ COMMON_PORTS = {
     80: "HTTP Web UI",
     81: "Nginx Proxy Manager",
     135: "RPC Endpoint",
+    137: "NetBIOS Name Service",
     139: "NetBIOS Session",
     443: "HTTPS Web UI",
     445: "SMB / Windows Share",
@@ -21,7 +23,7 @@ COMMON_PORTS = {
     3389: "RDP Remote Desktop",
     5000: "Docker Registry / Web UI",
     5001: "Synology DSM / QNAP",
-    5353: "mDNS / Bonjour",
+    5353: "mDNS / Zeroconf",
     5800: "VNC Web UI",
     5900: "VNC Display",
     6789: "NZBGet",
@@ -50,6 +52,66 @@ COMMON_PORTS = {
 
 WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9696, 22300, 32400]
 
+OUI_VENDOR_MAP = {
+    # Raspberry Pi
+    "DC:A6:32": "Raspberry Pi", "B8:27:EB": "Raspberry Pi", "E4:5F:01": "Raspberry Pi",
+    "D8:3A:DD": "Raspberry Pi", "28:CD:C1": "Raspberry Pi", "2C:CF:67": "Raspberry Pi",
+
+    # Apple
+    "AC:BC:32": "Apple Device", "DC:A6:32": "Apple Device", "F4:0F:24": "Apple Device",
+    "00:11:24": "Apple Device", "00:17:F2": "Apple Device", "00:1C:B3": "Apple Device",
+    "00:1E:52": "Apple Device", "00:23:12": "Apple Device", "00:25:00": "Apple Device",
+    "00:26:08": "Apple Device", "04:0C:CE": "Apple Device", "08:00:07": "Apple Device",
+    "10:93:E9": "Apple Device", "14:10:9F": "Apple Device", "18:20:32": "Apple Device",
+    "1C:1B:B2": "Apple Device", "20:3C:AE": "Apple Device", "24:24:0E": "Apple Device",
+    "28:0B:5C": "Apple Device", "2C:1F:23": "Apple Device", "30:07:4D": "Apple Device",
+    "34:08:BC": "Apple Device", "38:09:A5": "Apple Device", "3C:07:54": "Apple Device",
+    "40:30:04": "Apple Device", "44:00:10": "Apple Device", "48:43:7C": "Apple Device",
+    "4C:32:75": "Apple Device", "50:01:D9": "Apple Device", "54:26:96": "Apple Device",
+    "58:1F:AA": "Apple Device", "5C:87:9C": "Apple Device", "60:03:08": "Apple Device",
+    "64:20:99": "Apple Device", "68:09:27": "Apple Device", "6C:09:D6": "Apple Device",
+    "70:11:24": "Apple Device", "74:1B:B2": "Apple Device", "78:31:C1": "Apple Device",
+    "7C:01:91": "Apple Device", "80:00:6E": "Apple Device", "84:29:99": "Apple Device",
+    "88:1F:A1": "Apple Device", "8C:2D:AA": "Apple Device", "90:27:E4": "Apple Device",
+    "94:10:3E": "Apple Device", "98:00:C6": "Apple Device", "9C:04:EB": "Apple Device",
+
+    # Espressif / Smart Home / IoT
+    "E8:6B:EA": "Espressif IoT", "18:FE:34": "Espressif IoT", "24:0A:C4": "Espressif IoT",
+    "30:AE:A4": "Espressif IoT", "84:0D:8E": "Espressif IoT", "A4:CF:12": "Espressif IoT",
+    "CC:50:E3": "Espressif IoT", "D8:A0:1D": "Espressif IoT", "EC:FA:BC": "Espressif IoT",
+
+    # Ubiquiti / UniFi
+    "F4:92:BF": "Ubiquiti UniFi", "74:83:C2": "Ubiquiti UniFi", "B4:FB:E4": "Ubiquiti UniFi",
+    "18:E8:29": "Ubiquiti UniFi", "70:A7:41": "Ubiquiti UniFi", "DC:9F:DB": "Ubiquiti UniFi",
+    "00:15:6D": "Ubiquiti UniFi", "04:18:D6": "Ubiquiti UniFi", "24:A4:3C": "Ubiquiti UniFi",
+
+    # Synology / QNAP
+    "00:11:32": "Synology NAS", "00:08:9B": "QNAP NAS", "24:5E:BE": "Synology NAS",
+
+    # Amazon
+    "FC:65:DE": "Amazon Echo", "68:54:5A": "Amazon FireTV", "38:F7:CD": "Amazon Device",
+    "44:65:0D": "Amazon Echo", "A0:02:DC": "Amazon Echo", "74:75:48": "Amazon Device",
+
+    # Google
+    "14:C1:4E": "Google Cast", "00:1A:11": "Google Nest", "A4:77:33": "Google Home",
+    "D8:6C:63": "Google Chromecast", "E8:02:60": "Google Pixel", "3C:5A:B4": "Google Device",
+    "54:60:09": "Google Device", "F8:8F:CA": "Google Home",
+
+    # VMware / VirtualBox / QEMU / Hyper-V
+    "00:0C:29": "VMware Virtual Host", "00:50:56": "VMware Virtual Host",
+    "08:00:27": "VirtualBox Host", "52:54:00": "QEMU Virtual Host", "00:15:5D": "Hyper-V Host",
+
+    # ASUS / TP-Link / Netgear
+    "70:85:C2": "ASUS Device", "00:14:85": "ASUS Router", "F8:32:E4": "ASUS Router",
+    "50:C7:BF": "TP-Link Device", "E8:48:B8": "TP-Link Smart Plug", "C0:25:E9": "TP-Link Device",
+    "28:80:88": "Netgear Router", "A0:04:60": "Netgear Router",
+
+    # Philips Hue / Sonos / Roku / Samsung / LG
+    "00:17:88": "Philips Hue Bridge", "00:0E:58": "Sonos Speaker", "94:9F:3E": "Sonos Speaker",
+    "00:0D:4B": "Roku Player", "B0:EE:45": "Roku Player", "00:00:F0": "Samsung Smart TV",
+    "E4:E0:A6": "Samsung Smart TV", "00:1C:62": "LG Smart TV", "A8:23:FE": "LG Smart TV"
+}
+
 async def ping_ip(ip: str) -> bool:
     try:
         cmd = ["ping", "-c", "1", "-W", "1", ip] if os.name != "nt" else ["ping", "-n", "1", "-w", "400", ip]
@@ -73,8 +135,258 @@ def get_arp_mac(ip: str) -> str:
         pass
     return ""
 
+# --- TIER 1: mDNS / Zeroconf (Port 5353) ---
+def _make_mdns_ptr_query(ip: str) -> bytes:
+    parts = ip.split('.')[::-1]
+    rev_ip = ".".join(parts) + ".in-addr.arpa"
+    packet = bytearray(b"\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00")
+    for label in rev_ip.split('.'):
+        lbl = label.encode('ascii')
+        packet.append(len(lbl))
+        packet.extend(lbl)
+    packet.append(0)
+    packet.extend(b"\x00\x0c\x00\x01")  # PTR, IN
+    return bytes(packet)
+
+def _parse_mdns_response(data: bytes) -> Optional[str]:
+    try:
+        if len(data) < 12:
+            return None
+        ancount = int.from_bytes(data[6:8], 'big')
+        if ancount == 0:
+            return None
+        
+        offset = 12
+        qdcount = int.from_bytes(data[4:6], 'big')
+        for _ in range(qdcount):
+            while offset < len(data):
+                length = data[offset]
+                if length == 0:
+                    offset += 1
+                    break
+                elif (length & 0xC0) == 0xC0:
+                    offset += 2
+                    break
+                else:
+                    offset += 1 + length
+            offset += 4  # QTYPE & QCLASS
+            
+        for _ in range(ancount):
+            if offset >= len(data):
+                break
+            while offset < len(data):
+                length = data[offset]
+                if length == 0:
+                    offset += 1
+                    break
+                elif (length & 0xC0) == 0xC0:
+                    offset += 2
+                    break
+                else:
+                    offset += 1 + length
+            if offset + 10 > len(data):
+                break
+            rtype = int.from_bytes(data[offset:offset+2], 'big')
+            rdlength = int.from_bytes(data[offset+8:offset+10], 'big')
+            offset += 10
+            
+            if rtype == 12:  # PTR
+                curr = offset
+                rdata_end = offset + rdlength
+                labels = []
+                while curr < rdata_end and curr < len(data):
+                    length = data[curr]
+                    if length == 0:
+                        break
+                    elif (length & 0xC0) == 0xC0:
+                        ptr = int.from_bytes(data[curr:curr+2], 'big') & 0x3FFF
+                        curr = ptr
+                        continue
+                    else:
+                        curr += 1
+                        labels.append(data[curr:curr+length].decode('utf-8', errors='ignore'))
+                        curr += length
+                if labels:
+                    full_name = ".".join(labels)
+                    clean = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', full_name, flags=re.I)
+                    clean = re.sub(r'\._[a-zA-Z0-9-]+\._[tcp|udp].*$', '', clean, flags=re.I)
+                    if clean and not clean.startswith('http') and len(clean) >= 2:
+                        return clean
+            offset += rdlength
+    except Exception:
+        pass
+    return None
+
+async def query_mdns_hostname(ip: str, timeout: float = 0.5) -> Optional[str]:
+    loop = asyncio.get_event_loop()
+    
+    # 1. Direct UDP socket query to mDNS port 5353
+    def _udp_mdns():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        try:
+            query = _make_mdns_ptr_query(ip)
+            sock.sendto(query, (ip, 5353))
+            data, _ = sock.recvfrom(2048)
+            return _parse_mdns_response(data)
+        except Exception:
+            return None
+        finally:
+            sock.close()
+
+    try:
+        res = await loop.run_in_executor(None, _udp_mdns)
+        if res:
+            return res
+    except Exception:
+        pass
+
+    # 2. Python zeroconf library integration if available
+    try:
+        import zeroconf
+        zc = zeroconf.Zeroconf()
+        info = zc.get_service_info("_services._dns-sd._udp.local.", f"{ip}.local.", timeout=int(timeout * 1000))
+        zc.close()
+        if info and info.server:
+            srv = info.server.rstrip('.').replace('.local', '')
+            if srv and len(srv) >= 2:
+                return srv
+    except Exception:
+        pass
+
+    return None
+
+# --- TIER 2: NetBIOS Name Query (UDP Port 137) ---
+def _build_netbios_query() -> bytes:
+    header = b"\x80\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+    qname = b"\x20CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\x00"
+    qtype_qclass = b"\x00\x21\x00\x01"
+    return header + qname + qtype_qclass
+
+def _parse_netbios_response(data: bytes) -> Optional[str]:
+    try:
+        if len(data) < 57:
+            return None
+        num_names = data[56]
+        offset = 57
+        for _ in range(num_names):
+            if offset + 18 > len(data):
+                break
+            name_bytes = data[offset:offset+15]
+            name_type = data[offset+15]
+            flags = int.from_bytes(data[offset+16:offset+18], 'big')
+            offset += 18
+            
+            # Type 0x00 = Workstation/Server Name
+            if name_type == 0x00 and not (flags & 0x8000):
+                name = name_bytes.decode('latin-1', errors='ignore').strip()
+                if name and not name.startswith('IS~') and name != 'WORKGROUP':
+                    return name
+    except Exception:
+        pass
+    return None
+
+async def query_netbios_hostname(ip: str, timeout: float = 0.5) -> Optional[str]:
+    loop = asyncio.get_event_loop()
+    def _send_netbios():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        try:
+            pkt = _build_netbios_query()
+            sock.sendto(pkt, (ip, 137))
+            data, _ = sock.recvfrom(1024)
+            return _parse_netbios_response(data)
+        except Exception:
+            return None
+        finally:
+            sock.close()
+
+    try:
+        return await loop.run_in_executor(None, _send_netbios)
+    except Exception:
+        return None
+
+# --- TIER 3: UPnP / SSDP XML Discovery & HTTP Title ---
+async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout: float = 0.8) -> Optional[str]:
+    upnp_urls = [
+        f"http://{ip}:1900/description.xml",
+        f"http://{ip}:1900/device-desc.xml",
+        f"http://{ip}:8080/description.xml",
+        f"http://{ip}:49152/description.xml"
+    ]
+    for url in upnp_urls:
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout), ssl=False) as resp:
+                if resp.status == 200:
+                    text = await resp.text(errors='ignore')
+                    match = re.search(r'<friendlyName[^>]*>(.*?)</friendlyName>', text, re.I)
+                    if match and match.group(1).strip():
+                        fname = match.group(1).strip()
+                        clean = re.sub(r'[^a-zA-Z0-9\s-]', '', fname).strip()
+                        clean = re.sub(r'\s+', '-', clean)
+                        if len(clean) >= 2:
+                            return clean
+        except Exception:
+            pass
+
+    # SSDP Unicast M-SEARCH UDP check
+    loop = asyncio.get_event_loop()
+    def _ssdp_udp():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        try:
+            msg = (
+                "M-SEARCH * HTTP/1.1\r\n"
+                f"HOST: {ip}:1900\r\n"
+                'MAN: "ssdp:discover"\r\n'
+                "MX: 1\r\n"
+                "ST: ssdp:all\r\n\r\n"
+            ).encode('utf-8')
+            sock.sendto(msg, (ip, 1900))
+            data, _ = sock.recvfrom(2048)
+            resp_str = data.decode('utf-8', errors='ignore')
+            match = re.search(r'SERVER:\s*([^\r\n]+)', resp_str, re.I)
+            if match:
+                srv = match.group(1).strip()
+                if "/" in srv:
+                    brand = srv.split("/")[0].strip()
+                    if len(brand) >= 2 and brand.lower() not in ["upnp", "http"]:
+                        return brand
+        except Exception:
+            return None
+        finally:
+            sock.close()
+
+    try:
+        return await loop.run_in_executor(None, _ssdp_udp)
+    except Exception:
+        return None
+
+# --- TIER 4: MAC OUI Vendor Lookup ---
+def lookup_mac_oui(mac: str) -> Optional[str]:
+    if not mac:
+        return None
+    mac_clean = mac.upper().replace("-", ":").replace(".", "")
+    if len(mac_clean) >= 8 and ":" in mac_clean:
+        prefix = mac_clean[:8]
+        if prefix in OUI_VENDOR_MAP:
+            return f"{OUI_VENDOR_MAP[prefix]}-{prefix.replace(':', '')[-4:]}"
+
+    # Try netaddr if available
+    try:
+        import netaddr
+        eui = netaddr.EUI(mac)
+        org = eui.oui.registration().org
+        if org:
+            clean_org = org.split()[0].replace(",", "").strip()
+            if len(clean_org) >= 2:
+                return f"{clean_org}-Device"
+    except Exception:
+        pass
+
+    return None
+
 def derive_hostname_from_title(title: str, ip: str, open_ports: List[int]) -> Optional[str]:
-    # Priority check based on ports first
     if 8123 in open_ports:
         return "homeassistant"
     if 8006 in open_ports:
@@ -91,7 +403,7 @@ def derive_hostname_from_title(title: str, ip: str, open_ports: List[int]) -> Op
     if "qnap" in t_lower or "qts" in t_lower:
         return "qnap-nas"
     if "bauhn" in t_lower or "android tv" in t_lower or "google tv" in t_lower or "smarttv" in t_lower:
-        return "bauhn-android-tv"
+        return "android-tv"
     if "proxmox" in t_lower or "pve" in t_lower:
         match = re.search(r'([\w-]+)\s*-\s*proxmox', title, re.I)
         if match and match.group(1).strip():
@@ -132,6 +444,67 @@ def derive_hostname_from_title(title: str, ip: str, open_ports: List[int]) -> Op
         
     return None
 
+# --- DISCOVERY WATERFALL RESOLVER ---
+async def resolve_hostname_waterfall(
+    ip: str,
+    mac_addr: str,
+    open_ports: List[int],
+    first_title: Optional[str],
+    session: aiohttp.ClientSession
+) -> str:
+    # Tier 1: mDNS / Zeroconf (Port 5353)
+    try:
+        mdns_name = await query_mdns_hostname(ip, timeout=0.5)
+        if mdns_name:
+            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', mdns_name).strip().lower().replace(' ', '-')
+            if clean and len(clean) >= 2:
+                return clean
+    except Exception:
+        pass
+
+    # Tier 2: NetBIOS Name Query (UDP Port 137)
+    try:
+        nb_name = await query_netbios_hostname(ip, timeout=0.5)
+        if nb_name:
+            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', nb_name).strip().lower().replace(' ', '-')
+            if clean and len(clean) >= 2:
+                return clean
+    except Exception:
+        pass
+
+    # Tier 3: UPnP / SSDP XML Discovery & HTTP Title Scraping
+    try:
+        upnp_name = await query_upnp_ssdp_name(session, ip, timeout=0.6)
+        if upnp_name:
+            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', upnp_name).strip().lower().replace(' ', '-')
+            if clean and len(clean) >= 2:
+                return clean
+    except Exception:
+        pass
+
+    derived_title = derive_hostname_from_title(first_title, ip, open_ports)
+    if derived_title:
+        return derived_title
+
+    # System DNS Reverse Lookup
+    try:
+        hostname, _, _ = socket.gethostbyaddr(ip)
+        if hostname and not hostname.startswith("192.") and not hostname.startswith("host-"):
+            clean_dns = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', hostname, flags=re.I)
+            clean_dns = re.sub(r'[^a-zA-Z0-9\s-]', '', clean_dns).strip().lower().replace(' ', '-')
+            if clean_dns and len(clean_dns) >= 2:
+                return clean_dns
+    except Exception:
+        pass
+
+    # Tier 4: MAC OUI Vendor Lookup (Fallback for unidentified devices)
+    mac_vendor = lookup_mac_oui(mac_addr)
+    if mac_vendor:
+        return mac_vendor.lower().replace(' ', '-')
+
+    # Tier 5: Final Fallback
+    return f"host-{ip.split('.')[-1]}"
+
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     ports = [s["port"] for s in open_services]
     titles_concat = " ".join([s.get("name", "") for s in open_services]).lower()
@@ -168,7 +541,7 @@ async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) ->
                 if match:
                     title = match.group(1).strip()
                     title = re.sub(r'\s+', ' ', title)
-                    if len(title) > 0 and len(title) < 80:
+                    if 0 < len(title) < 80:
                         return title
     except Exception:
         pass
@@ -184,20 +557,12 @@ async def check_port(ip: str, port: int, timeout: float = 0.8) -> bool:
     except Exception:
         return False
 
-def get_hostname(ip: str) -> str:
-    try:
-        hostname, _, _ = socket.gethostbyaddr(ip)
-        return hostname
-    except Exception:
-        return ""
-
 async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.Semaphore, progress_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     async with sem:
         if progress_dict is not None:
             progress_dict["currentIp"] = ip
 
         ping_ok_task = asyncio.create_task(ping_ip(ip))
-        hostname_task = asyncio.to_thread(get_hostname, ip)
         arp_mac_task = asyncio.to_thread(get_arp_mac, ip)
 
         open_services = []
@@ -211,7 +576,6 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 
         # For active web ports, attempt title scraping
         first_title = None
-        # Prioritize 8123 (Home Assistant), 8006 (Proxmox), 5001 (Synology), 8080/443 over others for title
         priority_web_ports = [p for p in [8123, 8006, 5001, 8080, 443, 80, 3001, 3000] if p in active_ports]
         other_web_ports = [p for p in active_ports if p in WEB_PORTS and p not in priority_web_ports]
         ordered_ports = priority_web_ports + other_web_ports
@@ -240,15 +604,16 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 progress_dict["log"].append(f"[Discovered] {ip}:{port} -> \"{service_name}\"")
 
         is_pingable = await ping_ok_task
-        hostname = await hostname_task
         mac_addr = await arp_mac_task
 
-        # Determine if host is active
-        is_active = len(open_services) > 0 or bool(hostname) or is_pingable or bool(mac_addr)
-        
-        derived_host = derive_hostname_from_title(first_title, ip, active_ports)
-        final_host = hostname or derived_host or (f"host-{ip.split('.')[-1]}" if is_active else "")
-        
+        is_active = len(open_services) > 0 or is_pingable or bool(mac_addr)
+
+        # Run Discovery Waterfall for hostname
+        if is_active:
+            hostname = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+        else:
+            hostname = ""
+
         type_tag = classify_device_type(ip, open_services) if is_active else "Unassigned"
             
         if progress_dict is not None:
@@ -257,7 +622,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         return {
             "ip": ip,
             "status": "Active" if is_active else "Free",
-            "hostname": final_host,
+            "hostname": hostname,
             "type_tag": type_tag,
             "mac_address": mac_addr,
             "services": open_services,
@@ -272,4 +637,3 @@ async def scan_subnet(subnet_prefix: str = "192.168.2", start: int = 1, end: int
             for i in range(start, end + 1)
         ]
         return await asyncio.gather(*tasks)
-
