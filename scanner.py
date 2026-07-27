@@ -70,8 +70,11 @@ def get_hostname(ip: str) -> str:
     except Exception:
         return ""
 
-async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.Semaphore) -> Dict[str, Any]:
+async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.Semaphore, progress_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     async with sem:
+        if progress_dict is not None:
+            progress_dict["currentIp"] = ip
+
         hostname = await asyncio.to_thread(get_hostname, ip)
         open_services = []
         
@@ -102,6 +105,9 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 "auto_discovered": True,
                 "title_detected": bool(detected_title)
             })
+            if progress_dict is not None:
+                progress_dict["discoveredServices"] += 1
+                progress_dict["log"].append(f"[Discovered] {ip}:{port} -> \"{service_name}\"")
 
         # Determine status and device type tag
         is_active = len(open_services) > 0 or bool(hostname)
@@ -114,6 +120,9 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         elif ip.endswith(".1"):
             type_tag = "Gateway / Router"
             
+        if progress_dict is not None:
+            progress_dict["scannedCount"] += 1
+
         return {
             "ip": ip,
             "status": "Active" if is_active else "Free",
@@ -123,11 +132,11 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "last_seen": "Just now" if is_active else None
         }
 
-async def scan_subnet(subnet_prefix: str = "192.168.2", start: int = 1, end: int = 254) -> List[Dict[str, Any]]:
+async def scan_subnet(subnet_prefix: str = "192.168.2", start: int = 1, end: int = 254, progress_dict: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     sem = asyncio.Semaphore(30)
     async with aiohttp.ClientSession() as session:
         tasks = [
-            scan_single_ip(f"{subnet_prefix}.{i}", session, sem)
+            scan_single_ip(f"{subnet_prefix}.{i}", session, sem, progress_dict)
             for i in range(start, end + 1)
         ]
         return await asyncio.gather(*tasks)
