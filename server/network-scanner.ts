@@ -130,6 +130,69 @@ function fetchWebTitle(host: string, port: number, timeoutMs = 1200): Promise<st
   });
 }
 
+function deriveHostnameFromTitle(title: string): string | null {
+  if (!title) return null;
+  const tLower = title.toLowerCase();
+
+  if (tLower.includes('proxmox') || tLower.includes('pve')) {
+    const match = title.match(/([\w-]+)\s*-\s*proxmox/i);
+    if (match && match[1]?.trim()) return match[1].trim().toLowerCase();
+    return 'proxmox-pve';
+  }
+  if (tLower.includes('opnsense')) {
+    const match = title.match(/([\w.-]+)\s*-\s*opnsense/i);
+    if (match && match[1]?.trim()) return match[1].trim().toLowerCase();
+    return 'opnsense-gateway';
+  }
+  if (tLower.includes('pfsense')) return 'pfsense-gateway';
+  if (tLower.includes('pi-hole') || tLower.includes('pihole')) return 'pihole-dns';
+  if (tLower.includes('home assistant')) return 'homeassistant';
+  if (tLower.includes('portainer')) return 'docker-portainer';
+  if (tLower.includes('truenas') || tLower.includes('freenas')) return 'truenas-storage';
+  if (tLower.includes('synology') || tLower.includes('dsm')) return 'synology-nas';
+  if (tLower.includes('unifi')) return 'unifi-controller';
+  if (tLower.includes('jellyfin')) return 'jellyfin-media';
+  if (tLower.includes('plex')) return 'plex-server';
+  if (tLower.includes('uptime kuma')) return 'uptime-kuma';
+  if (tLower.includes('grafana')) return 'grafana-app';
+  if (tLower.includes('nginx proxy manager')) return 'npm-proxy-host';
+
+  const clean = title.replace(/[^a-zA-Z0-9\s-]/g, '').trim().toLowerCase().replace(/\s+/g, '-');
+  if (clean.length >= 2 && clean.length <= 25 && !['welcome', 'login', 'index', 'home', '404', 'dashboard'].some((w) => clean.includes(w))) {
+    return clean;
+  }
+  return null;
+}
+
+function classifyDeviceType(ip: string, openPorts: number[], titlesConcat: string): 'Gateway / Router' | 'Macvlan Container' | 'Shared/Host Container' | 'Infrastructure' | 'Physical Hardware' {
+  const titles = titlesConcat.toLowerCase();
+
+  // 1. Gateway / Router
+  if (ip.endsWith('.1') || ip.endsWith('.254') || ['opnsense', 'pfsense', 'router', 'gateway', 'unifi security', 'udm', 'openwrt'].some((k) => titles.includes(k))) {
+    return 'Gateway / Router';
+  }
+
+  // 2. Infrastructure
+  if (openPorts.includes(8006) || openPorts.includes(9090) || ['proxmox', 'pve', 'idrac', 'ilo', 'esxi', 'vsphere', 'unifi switch', 'cockpit'].some((k) => titles.includes(k))) {
+    return 'Infrastructure';
+  }
+
+  // 3. Shared/Host Container
+  if (openPorts.includes(9000) || openPorts.includes(81) || openPorts.includes(8080) || openPorts.length >= 3) {
+    return 'Shared/Host Container';
+  }
+
+  // 4. Macvlan Container
+  const macvlanPorts = [8123, 7878, 8989, 9696, 8096, 32400, 3001, 8081, 9091, 5800];
+  if (openPorts.some((p) => macvlanPorts.includes(p)) || titles.includes('pi-hole') || titles.includes('home assistant') || openPorts.length <= 2) {
+    if (openPorts.length > 0 && !(openPorts.includes(22) && openPorts.includes(445))) {
+      return 'Macvlan Container';
+    }
+  }
+
+  return 'Physical Hardware';
+}
+
 async function resolveHostname(ip: string): Promise<string> {
   try {
     const hostnames = await dns.promises.reverse(ip);
@@ -262,22 +325,41 @@ export async function runSubnetScan(): Promise<ScanProgress> {
             }
           }
 
-          let typeTag = existing?.typeTag || 'Physical Hardware';
-          if (typeTag === 'Unassigned') {
-            if (updatedServices.length > 1) {
-              typeTag = 'Shared/Host Container';
-            } else if (openPorts.some((p) => [9000, 8080, 8123].includes(p))) {
-              typeTag = 'Macvlan Container';
-            } else if (ip.endsWith('.1')) {
-              typeTag = 'Gateway / Router';
-            } else {
-              typeTag = 'Physical Hardware';
+          const titlesConcat = updatedServices.map((s) => s.name).join(' ');
+          const detectedTypeTag = classifyDeviceType(ip, openPorts, titlesConcat);
+          
+          let typeTag = existing?.typeTag || 'Unassigned';
+          if (typeTag === 'Unassigned' || typeTag === 'Physical Hardware') {
+            typeTag = detectedTypeTag;
+          } else if (['Gateway / Router', 'Infrastructure', 'Macvlan Container', 'Shared/Host Container'].includes(detectedTypeTag)) {
+            typeTag = detectedTypeTag;
+          }
+
+          let derivedHost: string | null = null;
+          for (const s of updatedServices) {
+            if (s.name) {
+              const h = deriveHostnameFromTitle(s.name);
+              if (h) {
+                derivedHost = h;
+                break;
+              }
             }
+          }
+
+          const existingHost = existing?.hostname || '';
+          let finalHostname = existingHost;
+
+          if (hostname && !hostname.startsWith('host-')) {
+            finalHostname = hostname;
+          } else if (derivedHost) {
+            finalHostname = derivedHost;
+          } else if (!existingHost || existingHost.startsWith('host-')) {
+            finalHostname = hostname || `host-${ip.split('.')[3]}`;
           }
 
           store.update(ip, {
             status: 'Active',
-            hostname: hostname || existing?.hostname || `host-${ip.split('.')[3]}`,
+            hostname: finalHostname,
             typeTag,
             services: updatedServices,
             lastSeen: 'Scanned just now'

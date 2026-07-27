@@ -219,16 +219,42 @@ async def perform_background_scan():
                     existing_services = json.loads(row["services"] or "[]")
                     existing_ports = {s["port"] for s in existing_services}
                     
+                    # Update or merge services
                     for new_svc in item["services"]:
                         if new_svc["port"] not in existing_ports:
                             existing_services.append(new_svc)
+                        else:
+                            # Update service title if a title was newly detected
+                            for s in existing_services:
+                                if s["port"] == new_svc["port"] and new_svc.get("title_detected"):
+                                    s["name"] = new_svc["name"]
+                                    s["url"] = new_svc["url"]
                             
-                    hostname = row["hostname"] or item["hostname"]
-                    type_tag = row["type_tag"] if row["type_tag"] != "Unassigned" else item["type_tag"]
+                    row_host = row["hostname"] or ""
+                    item_host = item.get("hostname", "")
+                    
+                    # Update hostname if newly discovered hostname exists and row is empty/generic (host-X)
+                    if item_host and not item_host.startswith("host-"):
+                        final_hostname = item_host
+                    elif not row_host or row_host.startswith("host-"):
+                        final_hostname = item_host or row_host
+                    else:
+                        final_hostname = row_host
+
+                    # Update type_tag if current row type is Unassigned/Physical Hardware or if scanned item tag is specific
+                    row_type = row["type_tag"] or "Unassigned"
+                    item_type = item.get("type_tag", "Physical Hardware")
+                    
+                    if row_type in ["Unassigned", "Physical Hardware"] and item_type != "Unassigned":
+                        final_type = item_type
+                    elif item_type in ["Gateway / Router", "Infrastructure", "Macvlan Container", "Shared/Host Container"]:
+                        final_type = item_type
+                    else:
+                        final_type = row_type
                     
                     conn.execute(
                         "UPDATE ips SET hostname=?, status='Active', type_tag=?, services=? WHERE ip=?",
-                        (hostname, type_tag, json.dumps(existing_services), ip)
+                        (final_hostname, final_type, json.dumps(existing_services), ip)
                     )
                     updated_count += 1
                 else:
