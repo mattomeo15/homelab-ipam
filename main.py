@@ -67,6 +67,23 @@ def get_db_connection():
 
 templates = Jinja2Templates(directory="templates")
 
+if os.path.exists("public"):
+    app.mount("/public", StaticFiles(directory="public"), name="public")
+
+@app.get("/favicon.png")
+async def get_favicon():
+    if os.path.exists("public/favicon.png"):
+        from fastapi.responses import FileResponse
+        return FileResponse("public/favicon.png")
+    raise HTTPException(status_code=404)
+
+@app.get("/logo.png")
+async def get_logo():
+    if os.path.exists("public/logo.png"):
+        from fastapi.responses import FileResponse
+        return FileResponse("public/logo.png")
+    raise HTTPException(status_code=404)
+
 scan_progress = {
     "scannedCount": 0,
     "total": 254,

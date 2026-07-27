@@ -1,26 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Network, Play, Plus, FileText, Code2, ChevronDown, Sun, Moon, Trash2, Upload } from 'lucide-react';
+import { Network, Play, FileText, Code2, ChevronDown, Sun, Moon, Trash2 } from 'lucide-react';
 
 interface HeaderProps {
   subnet: string;
   onScan: () => void;
   isScanning: boolean;
-  onOpenAddModal: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   onClearData: () => void;
-  onOpenImportModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   subnet,
   onScan,
   isScanning,
-  onOpenAddModal,
   theme,
   onToggleTheme,
   onClearData,
-  onOpenImportModal,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -39,10 +35,16 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="bg-slate-900/90 border-b border-slate-800/90 px-3 sm:px-6 py-2.5 sticky top-0 z-30 backdrop-blur-md">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
         {/* Branding */}
-        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-          <div className="p-1.5 sm:p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20 flex-shrink-0">
-            <Network className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
+        <a
+          href="/"
+          className="flex items-center space-x-2 sm:space-x-3 min-w-0 hover:opacity-90 transition-opacity"
+        >
+          <img
+            src="/logo.png"
+            alt="Homelab IPAM Logo"
+            className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-lg flex-shrink-0"
+            referrerPolicy="no-referrer"
+          />
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5 sm:space-x-2">
               <h1 className="text-xs sm:text-base font-bold tracking-tight text-white leading-tight truncate">
@@ -53,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
           </div>
-        </div>
+        </a>
 
         {/* Single Compact Settings ⚙️ Dropdown Button */}
         <div className="relative inline-block text-left" ref={dropdownRef}>
@@ -66,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {dropdownOpen && (
-            <div className="absolute right-0 mt-1.5 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 divide-y divide-slate-800/80">
+            <div className="absolute right-0 mt-1.5 w-40 sm:w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 divide-y divide-slate-800/80">
               {/* Actions */}
               <div className="py-1">
                 <button
@@ -75,100 +77,73 @@ export const Header: React.FC<HeaderProps> = ({
                     onScan();
                   }}
                   disabled={isScanning}
-                  className="w-full text-left flex items-center px-3 py-2 text-xs text-emerald-400 hover:bg-slate-800 transition-colors font-medium disabled:opacity-50"
+                  className="w-full text-left flex items-center px-2.5 py-1.5 text-xs text-emerald-400 hover:bg-slate-800 transition-colors font-medium disabled:opacity-50 whitespace-nowrap"
                 >
-                  <Play className="w-3.5 h-3.5 mr-2 text-emerald-400 fill-current" />
-                  {isScanning ? 'Scanning Subnet...' : 'Scan Subnet'}
-                </button>
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    onOpenAddModal();
-                  }}
-                  className="w-full text-left flex items-center px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors font-medium"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-2 text-emerald-400" />
-                  + Add Entry
+                  <Play className="w-3.5 h-3.5 mr-2 text-emerald-400 fill-current shrink-0" />
+                  {isScanning ? 'Scanning...' : 'Scan Subnet'}
                 </button>
               </div>
 
               {/* Theme Toggle */}
               <div className="py-1">
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <div className="px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                   Appearance
                 </div>
                 <button
                   onClick={onToggleTheme}
-                  className="w-full text-left flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  className="w-full text-left flex items-center px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap"
                 >
                   {theme === 'dark' ? (
                     <>
-                      <Moon className="w-3.5 h-3.5 mr-2 text-indigo-400" />
-                      Theme: Dark 🌙
+                      <Moon className="w-3.5 h-3.5 mr-2 text-indigo-400 shrink-0" />
+                      Theme: Dark
                     </>
                   ) : (
                     <>
-                      <Sun className="w-3.5 h-3.5 mr-2 text-amber-500" />
-                      Theme: Light ☀️
+                      <Sun className="w-3.5 h-3.5 mr-2 text-amber-500 shrink-0" />
+                      Theme: Light
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Export Tools & Data Management */}
+              {/* Export Tools */}
               <div className="py-1">
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <div className="px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                   Export Tools
                 </div>
                 <a
                   href="/api/export/md"
                   download
                   onClick={() => setDropdownOpen(false)}
-                  className="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  className="flex items-center px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  <FileText className="w-3.5 h-3.5 mr-2 text-emerald-400" />
+                  <FileText className="w-3.5 h-3.5 mr-2 text-emerald-400 shrink-0" />
                   Export Markdown (.md)
                 </a>
                 <a
                   href="/api/export/txt"
                   download
                   onClick={() => setDropdownOpen(false)}
-                  className="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  className="flex items-center px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  <FileText className="w-3.5 h-3.5 mr-2 text-indigo-400" />
+                  <FileText className="w-3.5 h-3.5 mr-2 text-indigo-400 shrink-0" />
                   Export Text Log (.txt)
                 </a>
                 <a
                   href="/api/export/json"
                   download
                   onClick={() => setDropdownOpen(false)}
-                  className="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  className="flex items-center px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  <Code2 className="w-3.5 h-3.5 mr-2 text-cyan-400" />
+                  <Code2 className="w-3.5 h-3.5 mr-2 text-cyan-400 shrink-0" />
                   Export JSON Backup
                 </a>
               </div>
 
-              {/* Data Import */}
-              <div className="py-1 border-b border-slate-800">
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                  Data Import
-                </div>
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    onOpenImportModal();
-                  }}
-                  className="w-full text-left flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                >
-                  <Upload className="w-3.5 h-3.5 mr-2 text-emerald-400" />
-                  Import Inventory (.md / paste)
-                </button>
-              </div>
-
               {/* Reset & Clear */}
               <div className="py-1">
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <div className="px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                   Data Reset
                 </div>
                 <button
@@ -176,9 +151,9 @@ export const Header: React.FC<HeaderProps> = ({
                     setDropdownOpen(false);
                     onClearData();
                   }}
-                  className="w-full text-left flex items-center px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-medium"
+                  className="w-full text-left flex items-center px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-medium whitespace-nowrap"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-2 text-rose-400" />
+                  <Trash2 className="w-3.5 h-3.5 mr-2 text-rose-400 shrink-0" />
                   Clear Saved Data
                 </button>
               </div>

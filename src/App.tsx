@@ -5,7 +5,6 @@ import { StatsBar } from './components/StatsBar';
 import { FilterToolbar } from './components/FilterToolbar';
 import { IpTable } from './components/IpTable';
 import { EditIpModal } from './components/EditIpModal';
-import { ScanProgressModal } from './components/ScanProgressModal';
 import { Server } from 'lucide-react';
 
 export default function App() {
@@ -252,10 +251,6 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onClearData={handleClearData}
-        onOpenAddModal={() => {
-          const firstFree = ipRecords.find((r) => r.status === 'Free') || ipRecords[0];
-          if (firstFree) handleOpenEditModal(firstFree);
-        }}
       />
 
       {/* MAIN CONTAINER */}
@@ -355,14 +350,6 @@ export default function App() {
         onClose={() => setIsEditModalOpen(false)}
         record={editModalRecord}
         onSave={handleSaveIpRecord}
-      />
-
-      {/* Scan Progress Modal */}
-      <ScanProgressModal
-        progress={scanProgress}
-        onClose={() =>
-          setScanProgress((prev) => ({ ...prev, isScanning: false, scannedCount: 0 }))
-        }
       />
     </div>
   );

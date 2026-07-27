@@ -10,6 +10,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   // API Endpoints
   app.get('/api/ips', (req, res) => {
