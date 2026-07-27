@@ -141,43 +141,118 @@ function fetchWebTitle(host: string, port: number, timeoutMs = 1200): Promise<st
   });
 }
 
-function deriveHostnameFromTitle(title: string, openPorts: number[] = []): string | null {
-  if (openPorts.includes(8123)) return 'homeassistant';
-  if (openPorts.includes(8006)) return 'proxmox-pve';
-  if (openPorts.includes(5001)) return 'synology-nas';
+const TITLE_BLACKLIST = [
+  'login',
+  'sign in',
+  'unauthorized',
+  '400 bad request',
+  '401 unauthorized',
+  'dashboard',
+  'home',
+  'web ui'
+];
 
-  if (!title) return null;
-  const tLower = title.toLowerCase();
+export function isBlacklistedTitle(title: string): boolean {
+  if (!title) return true;
+  const tLower = title.toLowerCase().trim();
+  if (tLower.includes('home assistant') || tLower.includes('homeassistant')) {
+    return false;
+  }
+  return TITLE_BLACKLIST.some((term) => tLower.includes(term));
+}
 
-  if (tLower.includes('home assistant') || tLower.includes('homeassistant')) return 'homeassistant';
-  if (tLower.includes('qnap') || tLower.includes('qts')) return 'qnap-nas';
-  if (tLower.includes('bauhn') || tLower.includes('android tv') || tLower.includes('google tv') || tLower.includes('smarttv')) return 'bauhn-android-tv';
-  if (tLower.includes('proxmox') || tLower.includes('pve')) {
-    const match = title.match(/([\w-]+)\s*-\s*proxmox/i);
-    if (match && match[1]?.trim()) return match[1].trim().toLowerCase();
-    return 'proxmox-pve';
-  }
-  if (tLower.includes('opnsense')) {
-    const match = title.match(/([\w.-]+)\s*-\s*opnsense/i);
-    if (match && match[1]?.trim()) return match[1].trim().toLowerCase();
-    return 'opnsense-gateway';
-  }
-  if (tLower.includes('pfsense')) return 'pfsense-gateway';
-  if (tLower.includes('pi-hole') || tLower.includes('pihole')) return 'pihole-dns';
-  if (tLower.includes('portainer')) return 'docker-portainer';
-  if (tLower.includes('truenas') || tLower.includes('freenas')) return 'truenas-storage';
-  if (tLower.includes('synology') || tLower.includes('dsm')) return 'synology-nas';
-  if (tLower.includes('unifi')) return 'unifi-controller';
-  if (tLower.includes('jellyfin')) return 'jellyfin-media';
-  if (tLower.includes('plex')) return 'plex-server';
-  if (tLower.includes('uptime kuma')) return 'uptime-kuma';
-  if (tLower.includes('grafana')) return 'grafana-app';
-  if (tLower.includes('nginx proxy manager')) return 'npm-proxy-host';
+export function isContainerId(hostname: string): boolean {
+  if (!hostname) return false;
+  return /^[a-f0-9]{12}$/i.test(hostname.trim());
+}
 
-  const clean = title.replace(/[^a-zA-Z0-9\s-]/g, '').trim().toLowerCase().replace(/\s+/g, '-');
-  if (clean.length >= 2 && clean.length <= 25 && !['welcome', 'login', 'index', 'home', '404', 'dashboard'].some((w) => clean.includes(w))) {
-    return clean;
+export function stripHostnameSuffixes(hostname: string): string {
+  if (!hostname) return '';
+  let curr = hostname.trim();
+  let prev = '';
+  while (curr !== prev) {
+    prev = curr;
+    curr = curr.replace(/(-|_)?(macvlan|docker|container|app)$/i, '');
   }
+  return curr;
+}
+
+export function sanitizeHostname(hostname: string, isGuess = false): string | null {
+  if (!hostname) return null;
+
+  // 2. CONTAINER ID DETECTION
+  if (isContainerId(hostname)) {
+    return null;
+  }
+
+  // 3. SUFFIX STRIPPING
+  let clean = stripHostnameSuffixes(hostname);
+  if (!clean) return null;
+
+  if (isContainerId(clean)) {
+    return null;
+  }
+
+  // 4. CONFIDENCE FLAG (?)
+  if (isGuess && !clean.endsWith('?')) {
+    clean = `${clean}?`;
+  }
+
+  return clean;
+}
+
+export function deriveHostnameFromTitle(title: string, openPorts: number[] = []): { name: string; isGuess: boolean } | null {
+  // 1. TITLE BLACKLIST FILTER
+  let validTitle: string | null = null;
+  if (title && !isBlacklistedTitle(title)) {
+    validTitle = title.trim();
+  }
+
+  if (validTitle) {
+    const tLower = validTitle.toLowerCase();
+    if (tLower.includes('home assistant') || tLower.includes('homeassistant')) return { name: 'homeassistant', isGuess: false };
+    if (tLower.includes('qnap') || tLower.includes('qts')) return { name: 'qnap-nas', isGuess: false };
+    if (tLower.includes('bauhn') || tLower.includes('android tv') || tLower.includes('google tv') || tLower.includes('smarttv')) return { name: 'bauhn-android-tv', isGuess: false };
+    if (tLower.includes('proxmox') || tLower.includes('pve')) {
+      const match = validTitle.match(/([\w-]+)\s*-\s*proxmox/i);
+      if (match && match[1]?.trim()) return { name: match[1].trim().toLowerCase(), isGuess: false };
+      return { name: 'proxmox-pve', isGuess: false };
+    }
+    if (tLower.includes('opnsense')) {
+      const match = validTitle.match(/([\w.-]+)\s*-\s*opnsense/i);
+      if (match && match[1]?.trim()) return { name: match[1].trim().toLowerCase(), isGuess: false };
+      return { name: 'opnsense-gateway', isGuess: false };
+    }
+    if (tLower.includes('pfsense')) return { name: 'pfsense-gateway', isGuess: false };
+    if (tLower.includes('pi-hole') || tLower.includes('pihole')) return { name: 'pihole-dns', isGuess: false };
+    if (tLower.includes('portainer')) return { name: 'docker-portainer', isGuess: false };
+    if (tLower.includes('truenas') || tLower.includes('freenas')) return { name: 'truenas-storage', isGuess: false };
+    if (tLower.includes('synology') || tLower.includes('dsm')) return { name: 'synology-nas', isGuess: false };
+    if (tLower.includes('unifi')) return { name: 'unifi-controller', isGuess: false };
+    if (tLower.includes('jellyfin')) return { name: 'jellyfin-media', isGuess: false };
+    if (tLower.includes('plex')) return { name: 'plex-server', isGuess: false };
+    if (tLower.includes('uptime kuma')) return { name: 'uptime-kuma', isGuess: false };
+    if (tLower.includes('grafana')) return { name: 'grafana-app', isGuess: false };
+    if (tLower.includes('nginx proxy manager')) return { name: 'npm-proxy-host', isGuess: false };
+
+    const clean = validTitle.replace(/[^a-zA-Z0-9\s-]/g, '').trim().toLowerCase().replace(/\s+/g, '-');
+    if (clean.length >= 2 && clean.length <= 30) {
+      return { name: clean, isGuess: false };
+    }
+  }
+
+  // 2. PORT SIGNATURE GUESS
+  if (openPorts.includes(8123)) return { name: 'Home Assistant', isGuess: true };
+  if (openPorts.includes(8006)) return { name: 'Proxmox VE', isGuess: true };
+  if (openPorts.includes(5001)) return { name: 'Synology NAS', isGuess: true };
+  if (openPorts.includes(32400)) return { name: 'Plex Media Server', isGuess: true };
+  if (openPorts.includes(8096)) return { name: 'Jellyfin', isGuess: true };
+  if (openPorts.includes(7878)) return { name: 'Radarr', isGuess: true };
+  if (openPorts.includes(8989)) return { name: 'Sonarr', isGuess: true };
+  if (openPorts.includes(9696)) return { name: 'Prowlarr', isGuess: true };
+  if (openPorts.includes(3001)) return { name: 'Uptime Kuma', isGuess: true };
+  if (openPorts.includes(9000)) return { name: 'Portainer', isGuess: true };
+
   return null;
 }
 
@@ -352,31 +427,35 @@ export async function runSubnetScan(): Promise<ScanProgress> {
             typeTag = detectedTypeTag;
           }
 
-          let derivedHost: string | null = deriveHostnameFromTitle('', openPorts);
-          if (!derivedHost) {
+          let derivedResult = deriveHostnameFromTitle('', openPorts);
+          if (!derivedResult) {
             for (const s of updatedServices) {
               if (s.name) {
-                const h = deriveHostnameFromTitle(s.name, openPorts);
-                if (h) {
-                  derivedHost = h;
+                const res = deriveHostnameFromTitle(s.name, openPorts);
+                if (res) {
+                  derivedResult = res;
                   break;
                 }
               }
             }
           }
 
-          const existingHost = existing?.hostname || '';
-          let finalHostname = existingHost;
+          let derivedHost: string | null = null;
+          if (derivedResult) {
+            derivedHost = sanitizeHostname(derivedResult.name, derivedResult.isGuess);
+          }
 
-          // Preserve existing user-customized hostnames!
-          if (existingHost && !existingHost.startsWith('host-')) {
-            finalHostname = existingHost;
+          const existingHost = existing?.hostname || '';
+          let finalHostname = '';
+
+          if (existingHost && !existingHost.startsWith('host-') && !isContainerId(existingHost)) {
+            finalHostname = sanitizeHostname(existingHost, false) || existingHost;
           } else if (derivedHost) {
             finalHostname = derivedHost;
           } else if (hostname && !hostname.startsWith('host-')) {
-            finalHostname = hostname;
-          } else if (!existingHost || existingHost.startsWith('host-')) {
-            finalHostname = hostname || `host-${ip.split('.')[3]}`;
+            finalHostname = sanitizeHostname(hostname, false) || `host-${ip.split('.')[3]}`;
+          } else {
+            finalHostname = `host-${ip.split('.')[3]}`;
           }
 
           store.update(ip, {

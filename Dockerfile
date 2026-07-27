@@ -26,6 +26,7 @@ COPY main.py .
 COPY scanner.py .
 COPY exporter.py .
 COPY templates/ templates/
+COPY public/ public/
 
 VOLUME ["/data"]
 

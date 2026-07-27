@@ -422,63 +422,135 @@ def lookup_mac_oui(mac: str) -> Optional[str]:
 
     return None
 
-def derive_hostname_from_title(title: str, ip: str, open_ports: List[int]) -> Optional[str]:
-    if 8123 in open_ports:
-        return "homeassistant"
-    if 8006 in open_ports:
-        return "proxmox-pve"
-    if 5001 in open_ports:
-        return "synology-nas"
+TITLE_BLACKLIST = [
+    "login", "sign in", "unauthorized", "400 bad request",
+    "401 unauthorized", "dashboard", "home", "web ui"
+]
 
+def is_blacklisted_title(title: str) -> bool:
     if not title:
-        return None
-    
-    t_lower = title.lower()
+        return True
+    t_lower = title.lower().strip()
     if "home assistant" in t_lower or "homeassistant" in t_lower:
-        return "homeassistant"
-    if "qnap" in t_lower or "qts" in t_lower:
-        return "qnap-nas"
-    if "bauhn" in t_lower or "android tv" in t_lower or "google tv" in t_lower or "smarttv" in t_lower:
-        return "android-tv"
-    if "proxmox" in t_lower or "pve" in t_lower:
-        match = re.search(r'([\w-]+)\s*-\s*proxmox', title, re.I)
-        if match and match.group(1).strip():
-            return match.group(1).strip().lower()
-        return "proxmox-pve"
-    if "opnsense" in t_lower:
-        match = re.search(r'([\w.-]+)\s*-\s*opnsense', title, re.I)
-        if match and match.group(1).strip():
-            return match.group(1).strip().lower()
-        return "opnsense-gateway"
-    if "pfsense" in t_lower:
-        return "pfsense-gateway"
-    if "pi-hole" in t_lower or "pihole" in t_lower:
-        return "pihole-dns"
-    if "portainer" in t_lower:
-        return "docker-portainer"
-    if "truenas" in t_lower or "freenas" in t_lower:
-        return "truenas-storage"
-    if "synology" in t_lower or "dsm" in t_lower:
-        return "synology-nas"
-    if "unifi" in t_lower:
-        return "unifi-controller"
-    if "jellyfin" in t_lower:
-        return "jellyfin-media"
-    if "plex" in t_lower:
-        return "plex-server"
-    if "uptime kuma" in t_lower:
-        return "uptime-kuma"
-    if "grafana" in t_lower:
-        return "grafana-app"
-    if "nginx proxy manager" in t_lower:
-        return "npm-proxy-host"
-        
-    clean = re.sub(r'[^a-zA-Z0-9\s-]', '', title).strip().lower()
-    clean = re.sub(r'\s+', '-', clean)
-    if 2 <= len(clean) <= 25 and not any(w in clean for w in ["welcome", "login", "index", "home", "404", "dashboard"]):
-        return clean
-        
-    return None
+        return False
+    for item in TITLE_BLACKLIST:
+        if item in t_lower:
+            return True
+    return False
+
+def is_container_id(hostname: str) -> bool:
+    if not hostname:
+        return False
+    return bool(re.match(r'^[a-fA-F0-9]{12}$', hostname.strip()))
+
+def strip_hostname_suffixes(hostname: str) -> str:
+    if not hostname:
+        return ""
+    curr = hostname.strip()
+    while True:
+        next_val = re.sub(r'(-|_)?(macvlan|docker|container|app)$', '', curr, flags=re.IGNORECASE)
+        if next_val == curr:
+            break
+        curr = next_val
+    return curr
+
+def sanitize_hostname(hostname: str, is_guess: bool = False) -> Optional[str]:
+    if not hostname:
+        return None
+
+    # 2. CONTAINER ID DETECTION
+    if is_container_id(hostname):
+        return None  # Discard 12-char hex container IDs
+
+    # 3. SUFFIX STRIPPING
+    clean = strip_hostname_suffixes(hostname)
+    if not clean:
+        return None
+
+    if is_container_id(clean):
+        return None
+
+    # 4. CONFIDENCE FLAG (?)
+    if is_guess and not clean.endswith('?'):
+        clean = f"{clean}?"
+
+    return clean
+
+def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> tuple[Optional[str], bool]:
+    # Returns (hostname, is_guess)
+    valid_title = None
+    if title and not is_blacklisted_title(title):
+        valid_title = title.strip()
+
+    if valid_title:
+        t_lower = valid_title.lower()
+        if "home assistant" in t_lower or "homeassistant" in t_lower:
+            return ("homeassistant", False)
+        if "qnap" in t_lower or "qts" in t_lower:
+            return ("qnap-nas", False)
+        if "bauhn" in t_lower or "android tv" in t_lower or "google tv" in t_lower or "smarttv" in t_lower:
+            return ("android-tv", False)
+        if "proxmox" in t_lower or "pve" in t_lower:
+            match = re.search(r'([\w-]+)\s*-\s*proxmox', valid_title, re.I)
+            if match and match.group(1).strip():
+                return (match.group(1).strip().lower(), False)
+            return ("proxmox-pve", False)
+        if "opnsense" in t_lower:
+            match = re.search(r'([\w.-]+)\s*-\s*opnsense', valid_title, re.I)
+            if match and match.group(1).strip():
+                return (match.group(1).strip().lower(), False)
+            return ("opnsense-gateway", False)
+        if "pfsense" in t_lower:
+            return ("pfsense-gateway", False)
+        if "pi-hole" in t_lower or "pihole" in t_lower:
+            return ("pihole-dns", False)
+        if "portainer" in t_lower:
+            return ("docker-portainer", False)
+        if "truenas" in t_lower or "freenas" in t_lower:
+            return ("truenas-storage", False)
+        if "synology" in t_lower or "dsm" in t_lower:
+            return ("synology-nas", False)
+        if "unifi" in t_lower:
+            return ("unifi-controller", False)
+        if "jellyfin" in t_lower:
+            return ("jellyfin-media", False)
+        if "plex" in t_lower:
+            return ("plex-server", False)
+        if "uptime kuma" in t_lower:
+            return ("uptime-kuma", False)
+        if "grafana" in t_lower:
+            return ("grafana-app", False)
+        if "nginx proxy manager" in t_lower:
+            return ("npm-proxy-host", False)
+
+        clean = re.sub(r'[^a-zA-Z0-9\s-]', '', valid_title).strip().lower()
+        clean = re.sub(r'\s+', '-', clean)
+        if 2 <= len(clean) <= 30:
+            return (clean, False)
+
+    # Port Signature Guesses
+    if 8123 in open_ports:
+        return ("Home Assistant", True)
+    if 8006 in open_ports:
+        return ("Proxmox VE", True)
+    if 5001 in open_ports:
+        return ("Synology NAS", True)
+    if 32400 in open_ports:
+        return ("Plex Media Server", True)
+    if 8096 in open_ports:
+        return ("Jellyfin", True)
+    if 7878 in open_ports:
+        return ("Radarr", True)
+    if 8989 in open_ports:
+        return ("Sonarr", True)
+    if 9696 in open_ports:
+        return ("Prowlarr", True)
+    if 3001 in open_ports:
+        return ("Uptime Kuma", True)
+    if 9000 in open_ports:
+        return ("Portainer", True)
+
+    return (None, False)
 
 # --- DISCOVERY WATERFALL RESOLVER ---
 async def resolve_hostname_waterfall(
@@ -492,7 +564,7 @@ async def resolve_hostname_waterfall(
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
-            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', mdns_name).strip().lower().replace(' ', '-')
+            clean = sanitize_hostname(mdns_name, is_guess=False)
             if clean and len(clean) >= 2:
                 return clean
     except Exception:
@@ -502,43 +574,48 @@ async def resolve_hostname_waterfall(
     try:
         nb_name = await query_netbios_hostname(ip, timeout=0.5)
         if nb_name:
-            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', nb_name).strip().lower().replace(' ', '-')
+            clean = sanitize_hostname(nb_name, is_guess=False)
             if clean and len(clean) >= 2:
                 return clean
     except Exception:
         pass
 
-    # Tier 3: UPnP / SSDP XML Discovery & HTTP Title Scraping
+    # Tier 3: UPnP / SSDP XML Discovery
     try:
         upnp_name = await query_upnp_ssdp_name(session, ip, timeout=0.6)
         if upnp_name:
-            clean = re.sub(r'[^a-zA-Z0-9\s-]', '', upnp_name).strip().lower().replace(' ', '-')
+            clean = sanitize_hostname(upnp_name, is_guess=False)
             if clean and len(clean) >= 2:
                 return clean
     except Exception:
         pass
 
-    derived_title = derive_hostname_from_title(first_title, ip, open_ports)
-    if derived_title:
-        return derived_title
+    # Tier 4: Scraped Web Title / Port Signature Guess
+    derived_name, is_guess = derive_hostname_from_title(first_title, open_ports)
+    if derived_name:
+        clean = sanitize_hostname(derived_name, is_guess=is_guess)
+        if clean and len(clean) >= 2:
+            return clean
 
-    # System DNS Reverse Lookup
+    # Tier 5: System DNS Reverse Lookup
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
         if hostname and not hostname.startswith("192.") and not hostname.startswith("host-"):
             clean_dns = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', hostname, flags=re.I)
-            clean_dns = re.sub(r'[^a-zA-Z0-9\s-]', '', clean_dns).strip().lower().replace(' ', '-')
-            if clean_dns and len(clean_dns) >= 2:
-                return clean_dns
+            clean = sanitize_hostname(clean_dns, is_guess=False)
+            if clean and len(clean) >= 2:
+                return clean
     except Exception:
         pass
 
-    # Tier 4: MAC OUI Vendor Lookup (Fallback for unidentified devices)
+    # Tier 6: MAC OUI Vendor Lookup (Fallback guess)
     mac_vendor = lookup_mac_oui(mac_addr)
     if mac_vendor:
-        return mac_vendor.lower().replace(' ', '-')
+        clean = sanitize_hostname(mac_vendor, is_guess=True)
+        if clean and len(clean) >= 2:
+            return clean
 
-    # Tier 5: Final Fallback
+    # Tier 7: Final Fallback
     return f"host-{ip.split('.')[-1]}"
 
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
