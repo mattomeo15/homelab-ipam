@@ -105,7 +105,7 @@
                 <div class="min-w-0">
                     <div class="flex items-center space-x-2">
                         <h1 class="text-sm sm:text-base font-bold tracking-tight text-white leading-tight truncate">HOMELAB IPAM</h1>
-                        <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0">192.168.2.0/24</span>
+                        <span id="headerSubnetBadge" class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0">192.168.2.0/24</span>
                     </div>
                 </div>
             </div>
@@ -439,8 +439,19 @@
 
         async function fetchIPs() {
             try {
-                const res = await fetch('/api/ips');
-                ipRecords = await res.json();
+                const [res, statsRes] = await Promise.all([
+                    fetch('/api/ips'),
+                    fetch('/api/stats')
+                ]);
+                if (res.ok) ipRecords = await res.json();
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    if (stats.subnet) {
+                        const badge = document.getElementById('headerSubnetBadge');
+                        if (badge) badge.innerText = stats.subnet;
+                        document.title = `Homelab IPAM - ${stats.subnet}`;
+                    }
+                }
                 updateStats();
                 render();
             } catch (err) {

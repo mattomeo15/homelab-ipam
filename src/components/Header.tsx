@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
                 HOMELAB IPAM
               </h1>
               <span className="text-[9px] sm:text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-semibold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0">
-                {subnet}
+                {subnet || '192.168.2.0/24'}
               </span>
             </div>
           </div>

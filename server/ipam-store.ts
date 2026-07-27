@@ -1,5 +1,58 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+
+export function detectSubnet(records?: IPRecord[]): string {
+  // 1. Environment Variable Override
+  if (process.env.TARGET_SUBNET && process.env.TARGET_SUBNET.trim()) {
+    return process.env.TARGET_SUBNET.trim();
+  }
+
+  // 2. Derive from active IP records if available
+  if (records && records.length > 0) {
+    const prefixCounts = new Map<string, number>();
+    for (const rec of records) {
+      const parts = rec.ip.split('.');
+      if (parts.length === 4) {
+        const prefix = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+      }
+    }
+    let bestSubnet = '';
+    let maxCount = 0;
+    for (const [sub, count] of prefixCounts.entries()) {
+      if (count > maxCount) {
+        maxCount = count;
+        bestSubnet = sub;
+      }
+    }
+    if (bestSubnet && maxCount >= 10) {
+      return bestSubnet;
+    }
+  }
+
+  // 3. Detect from OS Network Interfaces
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      const ifaceList = interfaces[name];
+      if (!ifaceList) continue;
+      for (const iface of ifaceList) {
+        if (!iface.internal && iface.family === 'IPv4') {
+          const parts = iface.address.split('.');
+          if (parts.length === 4) {
+            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error detecting network interface subnet:', err);
+  }
+
+  // 4. Default Fallback
+  return '192.168.2.0/24';
+}
 
 export interface ServiceItem {
   id: string;
@@ -45,8 +98,21 @@ export class IPAMStore {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed: IPRecord[] = JSON.parse(raw);
-        parsed.forEach((rec) => this.records.set(rec.ip, rec));
-        if (this.records.size === 254) return;
+        const mockHostnames = new Set([
+          'gateway.homelab.local', 'pihole-01.homelab.local', 'pihole-dns.homelab.local',
+          'pve-host01.homelab.local', 'pve-node1.homelab.local', 'docker-host-01',
+          'docker-app-node01', 'truenas-storage.homelab.local', 'synology-ds920plus',
+          'idrac-pve-server', 'homeassistant-macvlan'
+        ]);
+        let hasMock = false;
+        parsed.forEach((rec) => {
+          if (mockHostnames.has(rec.hostname)) {
+            hasMock = true;
+          } else {
+            this.records.set(rec.ip, rec);
+          }
+        });
+        if (!hasMock && this.records.size === 254) return;
       } catch (err) {
         console.error('Failed to parse ipam.json, re-seeding default database:', err);
       }
@@ -56,123 +122,17 @@ export class IPAMStore {
 
   private seedDefaults() {
     this.records.clear();
-    const defaultsMap: Record<string, Partial<IPRecord>> = {
-      '192.168.2.1': {
-        hostname: 'gateway.homelab.local',
-        status: 'Active',
-        typeTag: 'Gateway / Router',
-        macAddress: '70:85:C2:A1:00:01',
-        notes: 'OPNsense Core Router / Firewall with Unbound DNS & DHCP Server',
-        services: [
-          { id: 'svc-1', name: 'OPNsense WebGUI', port: 443, protocol: 'https', url: 'https://192.168.2.1:443', category: 'Security' },
-          { id: 'svc-2', name: 'DNS Resolver (Unbound)', port: 53, protocol: 'tcp', url: '', category: 'Networking' }
-        ]
-      },
-      '192.168.2.2': {
-        hostname: 'pihole-01.homelab.local',
-        status: 'Active',
-        typeTag: 'Macvlan Container',
-        macAddress: '02:42:C0:A8:02:02',
-        notes: 'Primary Network-wide AdBlocker & Local DNS authority',
-        services: [
-          { id: 'svc-1', name: 'Pi-hole Admin Console', port: 80, protocol: 'http', url: 'http://192.168.2.2/admin', category: 'DNS' },
-          { id: 'svc-2', name: 'DNS Server', port: 53, protocol: 'tcp', url: '', category: 'DNS' }
-        ]
-      },
-      '192.168.2.10': {
-        hostname: 'pve-host01.homelab.local',
-        status: 'Active',
-        typeTag: 'Physical Hardware',
-        macAddress: 'A4:BB:6D:22:98:10',
-        notes: 'Proxmox VE Hypervisor Host (AMD EPYC 16-Core, 128GB ECC)',
-        services: [
-          { id: 'svc-1', name: 'Proxmox VE Web UI', port: 8006, protocol: 'https', url: 'https://192.168.2.10:8006', category: 'Virtualization' },
-          { id: 'svc-2', name: 'SSH Terminal', port: 22, protocol: 'tcp', url: '', category: 'Management' }
-        ]
-      },
-      '192.168.2.15': {
-        hostname: 'truenas-storage.homelab.local',
-        status: 'Active',
-        typeTag: 'Physical Hardware',
-        macAddress: '00:25:90:E4:11:02',
-        notes: 'TrueNAS CORE ZFS Storage Server (64TB RAIDZ2)',
-        services: [
-          { id: 'svc-1', name: 'TrueNAS Dashboard', port: 443, protocol: 'https', url: 'https://192.168.2.15:443', category: 'Storage' },
-          { id: 'svc-2', name: 'SMB Share (NFS/CIFS)', port: 445, protocol: 'tcp', url: '', category: 'Storage' }
-        ]
-      },
-      '192.168.2.50': {
-        hostname: 'homeassistant-macvlan',
-        status: 'Active',
-        typeTag: 'Macvlan Container',
-        macAddress: '02:42:C0:A8:02:32',
-        notes: 'Home Assistant OS Instance controlling IoT & Zigbee bridge',
-        services: [
-          { id: 'svc-1', name: 'Home Assistant UI', port: 8123, protocol: 'http', url: 'http://192.168.2.50:8123', category: 'Smart Home' }
-        ]
-      },
-      '192.168.2.200': {
-        hostname: 'docker-app-node01',
-        status: 'Active',
-        typeTag: 'Shared/Host Container',
-        macAddress: '52:54:00:FA:99:20',
-        notes: 'Primary Docker Swarm / Standalone Host running multiple app containers',
-        services: [
-          { id: 'svc-1', name: 'Portainer CE', port: 9000, protocol: 'http', url: 'http://192.168.2.200:9000', category: 'Docker Management' },
-          { id: 'svc-2', name: 'Nginx Proxy Manager', port: 81, protocol: 'http', url: 'http://192.168.2.200:81', category: 'Reverse Proxy' },
-          { id: 'svc-3', name: 'Jellyfin Media Server', port: 8096, protocol: 'http', url: 'http://192.168.2.200:8096', category: 'Media' },
-          { id: 'svc-4', name: 'Uptime Kuma Status', port: 3001, protocol: 'http', url: 'http://192.168.2.200:3001', category: 'Monitoring' },
-          { id: 'svc-5', name: 'Grafana Dashboard', port: 3000, protocol: 'http', url: 'http://192.168.2.200:3000', category: 'Monitoring' },
-          { id: 'svc-6', name: 'Transmission Torrent', port: 9091, protocol: 'http', url: 'http://192.168.2.200:9091', category: 'Downloads' }
-        ]
-      },
-      '192.168.2.220': {
-        hostname: 'synology-ds920plus',
-        status: 'Active',
-        typeTag: 'Physical Hardware',
-        macAddress: '00:11:32:8F:7E:11',
-        notes: 'Backup NAS Drive for Hyper Backup & Surveillance Station',
-        services: [
-          { id: 'svc-1', name: 'Synology DSM Manager', port: 5001, protocol: 'https', url: 'https://192.168.2.220:5001', category: 'Storage' }
-        ]
-      },
-      '192.168.2.250': {
-        hostname: 'idrac-pve-server',
-        status: 'Reserved',
-        typeTag: 'Infrastructure',
-        macAddress: '00:1E:67:89:AB:CD',
-        notes: 'Dell Out-of-Band Management Controller (iDRAC 9)',
-        services: [
-          { id: 'svc-1', name: 'iDRAC 9 Console', port: 443, protocol: 'https', url: 'https://192.168.2.250:443', category: 'Management' }
-        ]
-      }
-    };
-
     for (let i = 1; i <= 254; i++) {
       const ip = `192.168.2.${i}`;
-      if (defaultsMap[ip]) {
-        const item = defaultsMap[ip]!;
-        this.records.set(ip, {
-          ip,
-          hostname: item.hostname || '',
-          status: item.status || 'Active',
-          typeTag: item.typeTag || 'Physical Hardware',
-          macAddress: item.macAddress || '',
-          notes: item.notes || '',
-          services: item.services || [],
-          lastSeen: 'Active now'
-        });
-      } else {
-        this.records.set(ip, {
-          ip,
-          hostname: '',
-          status: 'Free',
-          typeTag: 'Unassigned',
-          macAddress: '',
-          notes: '',
-          services: []
-        });
-      }
+      this.records.set(ip, {
+        ip,
+        hostname: '',
+        status: 'Free',
+        typeTag: 'Unassigned',
+        macAddress: '',
+        notes: '',
+        services: []
+      });
     }
     this.saveData();
   }
@@ -362,7 +322,7 @@ export class IPAMStore {
       free,
       reserved,
       totalServices,
-      subnet: '192.168.2.0/24',
+      subnet: detectSubnet(all),
       lastScanTime: new Date().toISOString()
     };
   }

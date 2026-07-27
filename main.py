@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List, Optional
 
-from scanner import scan_subnet
+from scanner import scan_subnet, get_active_subnet
 from exporter import generate_markdown_export, generate_text_export
 
 DB_PATH = "/data/ipam.db"
@@ -35,73 +35,26 @@ def init_db():
     """)
     conn.commit()
     
-    # Check if DB is empty; if so, populate 192.168.2.1 - 192.168.2.254 defaults
+    # Check if DB is empty; if so, populate 192.168.2.1 - 192.168.2.254 as clean unassigned records
     cursor.execute("SELECT COUNT(*) FROM ips")
     count = cursor.fetchone()[0]
     if count == 0:
-        default_services = {
-            "192.168.2.1": {
-                "hostname": "gateway.homelab.local",
-                "status": "Active",
-                "type_tag": "Gateway / Router",
-                "mac_address": "AA:BB:CC:DD:EE:01",
-                "notes": "Main Router / OPNsense Firewall",
-                "services": [
-                    {"id": "1", "name": "OPNsense WebGUI", "port": 443, "protocol": "https", "url": "https://192.168.2.1:443"},
-                    {"id": "2", "name": "DNS Resolver (Unbound)", "port": 53, "protocol": "tcp", "url": ""}
-                ]
-            },
-            "192.168.2.2": {
-                "hostname": "pihole-dns.homelab.local",
-                "status": "Active",
-                "type_tag": "Macvlan Container",
-                "mac_address": "02:42:C0:A8:02:02",
-                "notes": "Primary DNS & AdBlocker",
-                "services": [
-                    {"id": "1", "name": "Pi-hole Admin Console", "port": 80, "protocol": "http", "url": "http://192.168.2.2/admin"},
-                    {"id": "2", "name": "DNS Server", "port": 53, "protocol": "tcp", "url": ""}
-                ]
-            },
-            "192.168.2.10": {
-                "hostname": "pve-node1.homelab.local",
-                "status": "Active",
-                "type_tag": "Physical Hardware",
-                "mac_address": "70:85:C2:10:99:A4",
-                "notes": "Proxmox VE Hypervisor Host",
-                "services": [
-                    {"id": "1", "name": "Proxmox VE Web UI", "port": 8006, "protocol": "https", "url": "https://192.168.2.10:8006"},
-                    {"id": "2", "name": "SSH Shell", "port": 22, "protocol": "tcp", "url": ""}
-                ]
-            },
-            "192.168.2.200": {
-                "hostname": "docker-host-01",
-                "status": "Active",
-                "type_tag": "Shared/Host Container",
-                "mac_address": "52:54:00:12:34:56",
-                "notes": "Primary Docker Host running multiple container apps",
-                "services": [
-                    {"id": "1", "name": "Portainer CE", "port": 9000, "protocol": "http", "url": "http://192.168.2.200:9000"},
-                    {"id": "2", "name": "Nginx Proxy Manager", "port": 81, "protocol": "http", "url": "http://192.168.2.200:81"},
-                    {"id": "3", "name": "Home Assistant", "port": 8123, "protocol": "http", "url": "http://192.168.2.200:8123"},
-                    {"id": "4", "name": "Jellyfin Media", "port": 8096, "protocol": "http", "url": "http://192.168.2.200:8096"},
-                    {"id": "5", "name": "Uptime Kuma", "port": 3001, "protocol": "http", "url": "http://192.168.2.200:3001"}
-                ]
-            }
-        }
-        
         for i in range(1, 255):
             ip = f"192.168.2.{i}"
-            if ip in default_services:
-                data = default_services[ip]
-                cursor.execute(
-                    "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ip, data["hostname"], data["status"], data["type_tag"], data["mac_address"], data["notes"], json.dumps(data["services"]))
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
-                )
+            cursor.execute(
+                "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
+            )
+        conn.commit()
+    else:
+        # Purge legacy mock seed hosts if present from earlier deployments
+        mock_hosts = (
+            'gateway.homelab.local', 'pihole-01.homelab.local', 'pihole-dns.homelab.local',
+            'pve-node1.homelab.local', 'docker-host-01', 'pve-host01.homelab.local',
+            'truenas-storage.homelab.local', 'synology-ds920plus', 'idrac-pve-server', 'homeassistant-macvlan'
+        )
+        placeholders = ','.join('?' * len(mock_hosts))
+        cursor.execute(f"UPDATE ips SET hostname='', status='Free', type_tag='Unassigned', mac_address='', notes='', services='[]' WHERE hostname IN ({placeholders})", mock_hosts)
         conn.commit()
     conn.close()
 
@@ -163,24 +116,42 @@ async def get_all_ips():
 @app.get("/api/stats")
 async def get_stats():
     conn = get_db_connection()
-    rows = conn.execute("SELECT status, services FROM ips").fetchall()
+    rows = conn.execute("SELECT ip, status, services FROM ips").fetchall()
     conn.close()
     
     active = sum(1 for r in rows if r["status"] == "Active")
     reserved = sum(1 for r in rows if r["status"] == "Reserved")
     free = sum(1 for r in rows if r["status"] == "Free")
     total_services = 0
+    ip_list = []
     for r in rows:
+        ip_list.append(r["ip"])
         svcs = json.loads(r["services"] or "[]")
         total_services += len(svcs)
         
+    subnet = get_active_subnet(ip_list)
     return {
         "total": len(rows),
         "active": active,
         "reserved": reserved,
         "free": free,
-        "services": total_services
+        "services": total_services,
+        "subnet": subnet
     }
+
+@app.get("/api/status")
+async def get_status():
+    stats = await get_stats()
+    return {
+        "subnet": stats["subnet"],
+        "stats": stats,
+        "scanProgress": scan_progress
+    }
+
+@app.get("/api/subnet")
+async def get_subnet():
+    stats = await get_stats()
+    return {"subnet": stats["subnet"]}
 
 @app.put("/api/ips/{ip}")
 async def update_ip(ip: str, data: IPUpdateModel):

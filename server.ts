@@ -20,6 +20,19 @@ async function startServer() {
     res.json(store.getStats());
   });
 
+  app.get('/api/status', (req, res) => {
+    const stats = store.getStats();
+    res.json({
+      subnet: stats.subnet,
+      stats,
+      scanProgress: getScanProgress()
+    });
+  });
+
+  app.get('/api/subnet', (req, res) => {
+    res.json({ subnet: store.getStats().subnet });
+  });
+
   app.put('/api/ips/:ip', (req, res) => {
     try {
       const updated = store.update(req.params.ip, req.body);

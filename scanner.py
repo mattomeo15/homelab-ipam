@@ -6,6 +6,42 @@ import struct
 import aiohttp
 from typing import List, Dict, Any, Optional
 
+def get_active_subnet(db_ips: Optional[List[str]] = None) -> str:
+    # 1. Environment Variable Override
+    env_subnet = os.environ.get("TARGET_SUBNET")
+    if env_subnet and env_subnet.strip():
+        return env_subnet.strip()
+
+    # 2. Derive from active IP list if provided
+    if db_ips and len(db_ips) > 0:
+        prefix_counts = {}
+        for ip in db_ips:
+            parts = ip.split(".")
+            if len(parts) == 4:
+                prefix = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+                prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+        if prefix_counts:
+            best_prefix = max(prefix_counts, key=prefix_counts.get)
+            if prefix_counts[best_prefix] >= 10:
+                return best_prefix
+
+    # 3. Socket UDP probe to local interface address
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        if local_ip and not local_ip.startswith("127."):
+            parts = local_ip.split(".")
+            if len(parts) == 4:
+                return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+    except Exception:
+        pass
+
+    # 4. Fallback default
+    return "192.168.2.0/24"
+
 COMMON_PORTS = {
     21: "FTP Service",
     22: "SSH Shell",
