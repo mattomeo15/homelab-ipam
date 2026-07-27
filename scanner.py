@@ -1,27 +1,38 @@
 import asyncio
 import socket
 import re
+import os
 import aiohttp
 from typing import List, Dict, Any, Optional
 
 COMMON_PORTS = {
+    21: "FTP Service",
     22: "SSH Shell",
-    53: "DNS",
+    53: "DNS Resolver",
     80: "HTTP Web UI",
     81: "Nginx Proxy Manager",
+    135: "RPC Endpoint",
+    139: "NetBIOS Session",
     443: "HTTPS Web UI",
+    445: "SMB / Windows Share",
+    1900: "UPnP / SSDP",
     3000: "Grafana / Web App",
     3001: "Uptime Kuma",
+    3389: "RDP Remote Desktop",
     5000: "Docker Registry / Web UI",
-    5001: "Synology DSM",
+    5001: "Synology DSM / QNAP",
+    5353: "mDNS / Bonjour",
     5800: "VNC Web UI",
+    5900: "VNC Display",
     6789: "NZBGet",
+    7000: "AirPlay Service",
     7860: "AI Web UI",
     7878: "Radarr",
     8000: "Web Service",
     8006: "Proxmox VE Web UI",
-    8008: "Matrix / Web UI",
-    8080: "Web UI / Traefik",
+    8008: "Google Cast / Matrix",
+    8009: "Google Cast",
+    8080: "Web UI / Traefik / QNAP",
     8081: "Web UI / Sabnzbd",
     8096: "Jellyfin",
     8123: "Home Assistant",
@@ -33,16 +44,54 @@ COMMON_PORTS = {
     9091: "Transmission Torrent",
     9696: "Prowlarr",
     22300: "Homelab App",
-    32400: "Plex Media Server"
+    32400: "Plex Media Server",
+    62078: "Apple Mobile Device Sync"
 }
 
 WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9696, 22300, 32400]
 
-def derive_hostname_from_title(title: str, ip: str) -> Optional[str]:
+async def ping_ip(ip: str) -> bool:
+    try:
+        cmd = ["ping", "-c", "1", "-W", "1", ip] if os.name != "nt" else ["ping", "-n", "1", "-w", "400", ip]
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        await proc.communicate()
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+def get_arp_mac(ip: str) -> str:
+    try:
+        if os.path.exists("/proc/net/arp"):
+            with open("/proc/net/arp", "r") as f:
+                for line in f.readlines()[1:]:
+                    parts = line.split()
+                    if len(parts) >= 4 and parts[0] == ip:
+                        mac = parts[3]
+                        if mac and mac != "00:00:00:00:00:00":
+                            return mac.upper()
+    except Exception:
+        pass
+    return ""
+
+def derive_hostname_from_title(title: str, ip: str, open_ports: List[int]) -> Optional[str]:
+    # Priority check based on ports first
+    if 8123 in open_ports:
+        return "homeassistant"
+    if 8006 in open_ports:
+        return "proxmox-pve"
+    if 5001 in open_ports:
+        return "synology-nas"
+
     if not title:
         return None
     
     t_lower = title.lower()
+    if "home assistant" in t_lower or "homeassistant" in t_lower:
+        return "homeassistant"
+    if "qnap" in t_lower or "qts" in t_lower:
+        return "qnap-nas"
+    if "bauhn" in t_lower or "android tv" in t_lower or "google tv" in t_lower or "smarttv" in t_lower:
+        return "bauhn-android-tv"
     if "proxmox" in t_lower or "pve" in t_lower:
         match = re.search(r'([\w-]+)\s*-\s*proxmox', title, re.I)
         if match and match.group(1).strip():
@@ -57,8 +106,6 @@ def derive_hostname_from_title(title: str, ip: str) -> Optional[str]:
         return "pfsense-gateway"
     if "pi-hole" in t_lower or "pihole" in t_lower:
         return "pihole-dns"
-    if "home assistant" in t_lower:
-        return "homeassistant"
     if "portainer" in t_lower:
         return "docker-portainer"
     if "truenas" in t_lower or "freenas" in t_lower:
@@ -103,7 +150,7 @@ def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
         
     # 4. Macvlan Container
     macvlan_ports = {8123, 7878, 8989, 9696, 8096, 32400, 3001, 8081, 9091, 5800}
-    if any(p in macvlan_ports for p in ports) or "pi-hole" in titles_concat or "home assistant" in titles_concat or len(open_services) <= 2:
+    if any(p in macvlan_ports for p in ports) or "pi-hole" in titles_concat or "home assistant" in titles_concat:
         if len(open_services) > 0 and not (22 in ports and 445 in ports):
             return "Macvlan Container"
 
@@ -149,10 +196,11 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         if progress_dict is not None:
             progress_dict["currentIp"] = ip
 
-        hostname = await asyncio.to_thread(get_hostname, ip)
+        ping_ok_task = asyncio.create_task(ping_ip(ip))
+        hostname_task = asyncio.to_thread(get_hostname, ip)
+        arp_mac_task = asyncio.to_thread(get_arp_mac, ip)
+
         open_services = []
-        
-        # Probe ports concurrently for this IP
         port_tasks = [check_port(ip, port) for port in COMMON_PORTS.keys()]
         results = await asyncio.gather(*port_tasks)
         
@@ -163,7 +211,12 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 
         # For active web ports, attempt title scraping
         first_title = None
-        for port in active_ports:
+        # Prioritize 8123 (Home Assistant), 8006 (Proxmox), 5001 (Synology), 8080/443 over others for title
+        priority_web_ports = [p for p in [8123, 8006, 5001, 8080, 443, 80, 3001, 3000] if p in active_ports]
+        other_web_ports = [p for p in active_ports if p in WEB_PORTS and p not in priority_web_ports]
+        ordered_ports = priority_web_ports + other_web_ports
+
+        for port in ordered_ports:
             default_name = COMMON_PORTS.get(port, f"Service on {port}")
             detected_title = None
             if port in WEB_PORTS:
@@ -186,10 +239,14 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 progress_dict["discoveredServices"] += 1
                 progress_dict["log"].append(f"[Discovered] {ip}:{port} -> \"{service_name}\"")
 
-        # Determine status and device type tag
-        is_active = len(open_services) > 0 or bool(hostname)
+        is_pingable = await ping_ok_task
+        hostname = await hostname_task
+        mac_addr = await arp_mac_task
+
+        # Determine if host is active
+        is_active = len(open_services) > 0 or bool(hostname) or is_pingable or bool(mac_addr)
         
-        derived_host = derive_hostname_from_title(first_title, ip) if first_title else None
+        derived_host = derive_hostname_from_title(first_title, ip, active_ports)
         final_host = hostname or derived_host or (f"host-{ip.split('.')[-1]}" if is_active else "")
         
         type_tag = classify_device_type(ip, open_services) if is_active else "Unassigned"
@@ -202,6 +259,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "status": "Active" if is_active else "Free",
             "hostname": final_host,
             "type_tag": type_tag,
+            "mac_address": mac_addr,
             "services": open_services,
             "last_seen": "Just now" if is_active else None
         }
@@ -214,3 +272,4 @@ async def scan_subnet(subnet_prefix: str = "192.168.2", start: int = 1, end: int
             for i in range(start, end + 1)
         ]
         return await asyncio.gather(*tasks)
+

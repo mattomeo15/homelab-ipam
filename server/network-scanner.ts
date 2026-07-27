@@ -5,23 +5,33 @@ import https from 'https';
 import { store, IPRecord, ServiceItem } from './ipam-store';
 
 const COMMON_PORTS: Record<number, string> = {
-  22: 'SSH',
+  21: 'FTP Service',
+  22: 'SSH Shell',
   53: 'DNS Resolver',
   80: 'HTTP Web UI',
   81: 'Nginx Proxy Manager',
+  135: 'RPC Endpoint',
+  139: 'NetBIOS Session',
   443: 'HTTPS Web UI',
+  445: 'SMB / Windows Share',
+  1900: 'UPnP / SSDP',
   3000: 'Grafana / Web App',
   3001: 'Uptime Kuma',
-  5000: 'Docker Registry / Flask',
-  5001: 'Synology DSM',
+  3389: 'RDP Remote Desktop',
+  5000: 'Docker Registry / Web UI',
+  5001: 'Synology DSM / QNAP',
+  5353: 'mDNS / Bonjour',
   5800: 'VNC Web UI',
+  5900: 'VNC Display',
   6789: 'NZBGet',
+  7000: 'AirPlay Service',
   7860: 'AI Web UI',
   7878: 'Radarr',
   8000: 'Web Service',
   8006: 'Proxmox VE Web UI',
-  8008: 'Matrix Synapse',
-  8080: 'Web UI / Traefik',
+  8008: 'Google Cast / Matrix',
+  8009: 'Google Cast',
+  8080: 'Web UI / Traefik / QNAP',
   8081: 'SABnzbd',
   8096: 'Jellyfin Media Server',
   8123: 'Home Assistant',
@@ -33,10 +43,11 @@ const COMMON_PORTS: Record<number, string> = {
   9091: 'Transmission Web',
   9696: 'Prowlarr',
   22300: 'Homelab Web App',
-  32400: 'Plex Media Server'
+  32400: 'Plex Media Server',
+  62078: 'Apple Mobile Device Sync'
 };
 
-const WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9696, 22300, 32400];
+const WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9696, 22300, 32400];
 
 export interface ScanProgress {
   scannedCount: number;
@@ -130,10 +141,17 @@ function fetchWebTitle(host: string, port: number, timeoutMs = 1200): Promise<st
   });
 }
 
-function deriveHostnameFromTitle(title: string): string | null {
+function deriveHostnameFromTitle(title: string, openPorts: number[] = []): string | null {
+  if (openPorts.includes(8123)) return 'homeassistant';
+  if (openPorts.includes(8006)) return 'proxmox-pve';
+  if (openPorts.includes(5001)) return 'synology-nas';
+
   if (!title) return null;
   const tLower = title.toLowerCase();
 
+  if (tLower.includes('home assistant') || tLower.includes('homeassistant')) return 'homeassistant';
+  if (tLower.includes('qnap') || tLower.includes('qts')) return 'qnap-nas';
+  if (tLower.includes('bauhn') || tLower.includes('android tv') || tLower.includes('google tv') || tLower.includes('smarttv')) return 'bauhn-android-tv';
   if (tLower.includes('proxmox') || tLower.includes('pve')) {
     const match = title.match(/([\w-]+)\s*-\s*proxmox/i);
     if (match && match[1]?.trim()) return match[1].trim().toLowerCase();
@@ -146,7 +164,6 @@ function deriveHostnameFromTitle(title: string): string | null {
   }
   if (tLower.includes('pfsense')) return 'pfsense-gateway';
   if (tLower.includes('pi-hole') || tLower.includes('pihole')) return 'pihole-dns';
-  if (tLower.includes('home assistant')) return 'homeassistant';
   if (tLower.includes('portainer')) return 'docker-portainer';
   if (tLower.includes('truenas') || tLower.includes('freenas')) return 'truenas-storage';
   if (tLower.includes('synology') || tLower.includes('dsm')) return 'synology-nas';
@@ -335,13 +352,15 @@ export async function runSubnetScan(): Promise<ScanProgress> {
             typeTag = detectedTypeTag;
           }
 
-          let derivedHost: string | null = null;
-          for (const s of updatedServices) {
-            if (s.name) {
-              const h = deriveHostnameFromTitle(s.name);
-              if (h) {
-                derivedHost = h;
-                break;
+          let derivedHost: string | null = deriveHostnameFromTitle('', openPorts);
+          if (!derivedHost) {
+            for (const s of updatedServices) {
+              if (s.name) {
+                const h = deriveHostnameFromTitle(s.name, openPorts);
+                if (h) {
+                  derivedHost = h;
+                  break;
+                }
               }
             }
           }
@@ -349,10 +368,13 @@ export async function runSubnetScan(): Promise<ScanProgress> {
           const existingHost = existing?.hostname || '';
           let finalHostname = existingHost;
 
-          if (hostname && !hostname.startsWith('host-')) {
-            finalHostname = hostname;
+          // Preserve existing user-customized hostnames!
+          if (existingHost && !existingHost.startsWith('host-')) {
+            finalHostname = existingHost;
           } else if (derivedHost) {
             finalHostname = derivedHost;
+          } else if (hostname && !hostname.startsWith('host-')) {
+            finalHostname = hostname;
           } else if (!existingHost || existingHost.startsWith('host-')) {
             finalHostname = hostname || `host-${ip.split('.')[3]}`;
           }

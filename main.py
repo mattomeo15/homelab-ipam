@@ -230,16 +230,20 @@ async def perform_background_scan():
                                     s["name"] = new_svc["name"]
                                     s["url"] = new_svc["url"]
                             
-                    row_host = row["hostname"] or ""
-                    item_host = item.get("hostname", "")
+                    row_host = (row["hostname"] or "").strip()
+                    item_host = (item.get("hostname", "") or "").strip()
                     
-                    # Update hostname if newly discovered hostname exists and row is empty/generic (host-X)
-                    if item_host and not item_host.startswith("host-"):
-                        final_hostname = item_host
-                    elif not row_host or row_host.startswith("host-"):
-                        final_hostname = item_host or row_host
-                    else:
+                    # If database already has a custom hostname (not starting with host- and not empty), PRESERVE IT!
+                    if row_host and not row_host.startswith("host-"):
                         final_hostname = row_host
+                    elif item_host and not item_host.startswith("host-"):
+                        final_hostname = item_host
+                    else:
+                        final_hostname = row_host or item_host or f"host-{ip.split('.')[-1]}"
+
+                    row_mac = (row["mac_address"] or "").strip()
+                    item_mac = (item.get("mac_address", "") or "").strip()
+                    final_mac = row_mac if row_mac else item_mac
 
                     # Update type_tag if current row type is Unassigned/Physical Hardware or if scanned item tag is specific
                     row_type = row["type_tag"] or "Unassigned"
@@ -253,8 +257,8 @@ async def perform_background_scan():
                         final_type = row_type
                     
                     conn.execute(
-                        "UPDATE ips SET hostname=?, status='Active', type_tag=?, services=? WHERE ip=?",
-                        (final_hostname, final_type, json.dumps(existing_services), ip)
+                        "UPDATE ips SET hostname=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
+                        (final_hostname, final_type, final_mac, json.dumps(existing_services), ip)
                     )
                     updated_count += 1
                 else:

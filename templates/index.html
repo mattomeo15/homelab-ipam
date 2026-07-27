@@ -28,6 +28,68 @@
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #334155; }
         html, body { overflow-x: hidden; width: 100%; max-width: 100vw; }
+
+        /* Light mode comprehensive overrides */
+        html.light-mode, html.light-mode body {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+        }
+        html.light-mode header {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+        html.light-mode header h1 {
+            color: #0f172a !important;
+        }
+        html.light-mode .bg-slate-900,
+        html.light-mode .bg-slate-950,
+        html.light-mode .bg-slate-850 {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        html.light-mode .bg-slate-800 {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+        }
+        html.light-mode .border-slate-800,
+        html.light-mode .border-slate-800\/90,
+        html.light-mode .border-slate-800\/80,
+        html.light-mode .border-slate-700 {
+            border-color: #e2e8f0 !important;
+        }
+        html.light-mode .text-slate-100,
+        html.light-mode .text-slate-200,
+        html.light-mode .text-slate-300,
+        html.light-mode .text-white {
+            color: #0f172a !important;
+        }
+        html.light-mode .text-slate-400,
+        html.light-mode .text-slate-500 {
+            color: #475569 !important;
+        }
+        html.light-mode table thead tr {
+            background-color: #f1f5f9 !important;
+            color: #334155 !important;
+        }
+        html.light-mode table tbody tr {
+            border-color: #f1f5f9 !important;
+        }
+        html.light-mode table tbody tr:hover {
+            background-color: #f1f5f9 !important;
+        }
+        html.light-mode input, html.light-mode select, html.light-mode textarea {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+        html.light-mode #settingsDropdownMenu,
+        html.light-mode #editModal > div > div {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col overflow-x-hidden">
@@ -938,16 +1000,33 @@
             fetchIPs();
         }
 
-        function toggleThemeMode() {
-            const isLight = document.documentElement.classList.toggle('light-mode');
+        function applyTheme(isLight) {
+            const html = document.documentElement;
             const label = document.getElementById('themeModeLabel');
-            if (label) {
-                if (isLight) {
+            if (isLight) {
+                html.classList.add('light-mode');
+                html.classList.remove('dark');
+                localStorage.setItem('ipam_theme', 'light');
+                if (label) {
                     label.innerHTML = `<svg class="w-3.5 h-3.5 mr-2 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> Theme: Light ☀️`;
-                } else {
+                }
+            } else {
+                html.classList.remove('light-mode');
+                html.classList.add('dark');
+                localStorage.setItem('ipam_theme', 'dark');
+                if (label) {
                     label.innerHTML = `<svg class="w-3.5 h-3.5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg> Theme: Dark 🌙`;
                 }
             }
+        }
+
+        function toggleThemeMode() {
+            const currentIsLight = document.documentElement.classList.contains('light-mode');
+            applyTheme(!currentIsLight);
+        }
+
+        if (localStorage.getItem('ipam_theme') === 'light') {
+            applyTheme(true);
         }
 
         updateSortIndicators();
