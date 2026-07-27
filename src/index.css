@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+/* High-Contrast Professional Light Mode Theme */
+html.light-mode {
+  color-scheme: light;
+}
+
+/* Page Background & Body Base */
+html.light-mode body,
+html.light-mode #root,
+html.light-mode .bg-slate-950 {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* Header, Navbar, Cards & Toolbars */
+html.light-mode header,
+html.light-mode .bg-slate-900\/90,
+html.light-mode .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important; /* slate-200 */
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* Universal Borders & Dividers in Light Mode */
+html.light-mode .border-slate-800,
+html.light-mode .border-slate-800\/90,
+html.light-mode .border-slate-800\/80,
+html.light-mode .border-slate-800\/50,
+html.light-mode .border-slate-800\/40,
+html.light-mode .border-slate-800\/30,
+html.light-mode .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+
+html.light-mode .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+html.light-mode .divide-slate-800\/80 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* Buttons, Control Containers & Dark Pills */
+html.light-mode .bg-slate-800,
+html.light-mode .bg-slate-800\/80,
+html.light-mode .bg-slate-800\/50 {
+  background-color: #f1f5f9 !important; /* slate-100 */
+  color: #1e293b !important; /* slate-800 */
+  border-color: #cbd5e1 !important; /* slate-300 */
+}
+
+html.light-mode .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0 !important; /* slate-200 */
+}
+
+html.light-mode .hover\:bg-slate-700:hover {
+  background-color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* Table Specific Light Mode Styling */
+html.light-mode table thead tr,
+html.light-mode .bg-slate-950\/90 {
+  background-color: #f1f5f9 !important; /* slate-100 */
+  color: #334155 !important; /* slate-700 header text */
+  border-bottom-color: #cbd5e1 !important;
+}
+
+html.light-mode table tbody tr {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+html.light-mode table tbody tr:hover {
+  background-color: #f8fafc !important; /* soft hover background */
+}
+
+/* Form Inputs, Selects & Textareas */
+html.light-mode select,
+html.light-mode input[type="text"],
+html.light-mode input[type="number"],
+html.light-mode textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
+}
+
+html.light-mode select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Text Color Adjustments for High Readability */
+html.light-mode .text-slate-100,
+html.light-mode .text-slate-200,
+html.light-mode .text-white {
+  color: #0f172a !important; /* slate-900 */
+}
+
+html.light-mode .text-slate-300 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+html.light-mode .text-slate-400 {
+  color: #475569 !important; /* slate-600 */
+}
+
+html.light-mode .text-slate-500 {
+  color: #64748b !important; /* slate-500 */
+}
+
+/* Status & Metric High-Contrast Text Colors */
+html.light-mode .text-emerald-400 {
+  color: #059669 !important; /* emerald-600 */
+}
+
+html.light-mode .text-amber-400 {
+  color: #d97706 !important; /* amber-600 */
+}
+
+html.light-mode .text-blue-400 {
+  color: #2563eb !important; /* blue-600 */
+}
+
+html.light-mode .text-purple-400 {
+  color: #9333ea !important; /* purple-600 */
+}
+
+html.light-mode .text-cyan-400 {
+  color: #0891b2 !important; /* cyan-600 */
+}
+
+html.light-mode .text-indigo-400 {
+  color: #4f46e5 !important; /* indigo-600 */
+}
+
+/* Badge Styles in Light Mode */
+html.light-mode .bg-emerald-500\/10,
+html.light-mode .bg-emerald-950\/40 {
+  background-color: #d1fae5 !important; /* emerald-100 */
+  color: #047857 !important; /* emerald-700 */
+  border-color: #a7f3d0 !important;
+}
+
+html.light-mode .bg-amber-500\/10 {
+  background-color: #fef3c7 !important; /* amber-100 */
+  color: #b45309 !important; /* amber-700 */
+  border-color: #fde68a !important;
+}
+
+html.light-mode .bg-blue-500\/10 {
+  background-color: #dbeafe !important; /* blue-100 */
+  color: #1d4ed8 !important; /* blue-700 */
+  border-color: #bfdbfe !important;
+}
+
+html.light-mode .bg-purple-500\/10 {
+  background-color: #f3e8ff !important; /* purple-100 */
+  color: #7e22ce !important; /* purple-700 */
+  border-color: #e9d5ff !important;
+}
+
+html.light-mode .bg-indigo-500\/10 {
+  background-color: #e0e7ff !important; /* indigo-100 */
+  color: #3730a3 !important; /* indigo-700 */
+  border-color: #c7d2fe !important;
+}
+
+html.light-mode .bg-cyan-500\/10 {
+  background-color: #cffafe !important; /* cyan-100 */
+  color: #0e7490 !important; /* cyan-700 */
+  border-color: #a5f3fc !important;
+}
+
+/* Modals & Overlays */
+html.light-mode .fixed.inset-0.bg-black\/70,
+html.light-mode .fixed.inset-0.bg-slate-950\/80 {
+  background-color: rgba(15, 23, 42, 0.4) !important;
+}

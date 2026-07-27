@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homelab IPAM - 192.168.2.0/24</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#111827',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbars & overflow prevention */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        html, body { overflow-x: hidden; width: 100%; max-width: 100vw; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col overflow-x-hidden">
+
+    <!-- 1. TOP HEADER BAR WITH SINGLE SETTINGS DROPDOWN MENU -->
+    <header class="bg-slate-900/90 border-b border-slate-800/90 px-3 sm:px-6 py-3 sticky top-0 z-30 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+            <!-- Branding -->
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20 flex-shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-sm sm:text-base font-bold tracking-tight text-white leading-tight truncate">HOMELAB IPAM</h1>
+                        <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-semibold px-2 py-0.5 rounded-full flex-shrink-0">192.168.2.0/24</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Single Compact Settings ⚙️ Dropdown Button -->
+            <div class="relative inline-block text-left" id="settingsDropdownContainer">
+                <button id="settingsDropdownBtn" onclick="toggleSettingsDropdown(event)" class="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg border border-slate-700 font-medium text-[11px] sm:text-xs transition-colors shadow-sm focus:outline-none">
+                    <span>Settings ⚙️</span>
+                    <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+
+                <!-- Settings Dropdown Menu -->
+                <div id="settingsDropdownMenu" class="hidden absolute right-0 mt-1.5 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 divide-y divide-slate-800/80">
+                    <div class="py-1">
+                        <button onclick="runScan(); closeSettingsDropdown();" class="w-full text-left flex items-center px-3 py-2 text-xs text-emerald-400 hover:bg-slate-800 transition-colors font-medium">
+                            <svg class="w-3.5 h-3.5 mr-2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            Scan Subnet
+                        </button>
+                        <button onclick="openEditModalForNew(); closeSettingsDropdown();" class="w-full text-left flex items-center px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors font-medium">
+                            <svg class="w-3.5 h-3.5 mr-2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            + Add Entry
+                        </button>
+                    </div>
+                    <!-- Theme Section -->
+                    <div class="py-1">
+                        <div class="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Appearance</div>
+                        <button onclick="toggleThemeMode();" class="w-full text-left flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                            <span id="themeModeLabel" class="flex items-center">
+                                <svg class="w-3.5 h-3.5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                                Theme: Dark 🌙
+                            </span>
+                        </button>
+                    </div>
+                    <div class="py-1">
+                        <div class="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Export Tools</div>
+                        <a href="/api/export/md" download onclick="closeSettingsDropdown()" class="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                            <svg class="w-3.5 h-3.5 mr-2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Export Markdown (.md)
+                        </a>
+                        <a href="/api/export/txt" download onclick="closeSettingsDropdown()" class="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                            <svg class="w-3.5 h-3.5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V7.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 1H7a2 2 0 00-2 2v16a2 2 0 002 2z"></path></svg>
+                            Export Text Log (.txt)
+                        </a>
+                        <a href="/api/export/json" download onclick="closeSettingsDropdown()" class="flex items-center px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                            <svg class="w-3.5 h-3.5 mr-2 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            Export JSON Backup
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 overflow-x-hidden">
+
+        <!-- 2. SINGLE CONSOLIDATED METRICS BAR STRIP -->
+        <div class="bg-slate-900/90 border border-slate-800/90 rounded-xl p-2 sm:p-2.5 mb-4 shadow-sm">
+            <div class="grid grid-cols-3 sm:grid-cols-6 text-xs font-mono divide-y sm:divide-y-0 divide-slate-800/80">
+                <!-- 1. Active -->
+                <div class="p-1.5 sm:p-2 text-center">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Active</span>
+                    <span id="statActive" class="text-sm sm:text-base font-bold text-emerald-400">0</span>
+                </div>
+                <!-- 2. Reserved -->
+                <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Reserved</span>
+                    <span id="statReserved" class="text-sm sm:text-base font-bold text-amber-400">0</span>
+                </div>
+                <!-- 3. Available -->
+                <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Available</span>
+                    <span id="statFree" class="text-sm sm:text-base font-bold text-slate-300">0</span>
+                </div>
+                <!-- 4. Hardware -->
+                <div class="p-1.5 sm:p-2 text-center sm:border-l border-slate-800/80">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Hardware</span>
+                    <span id="statHardware" class="text-sm sm:text-base font-bold text-blue-400">0</span>
+                </div>
+                <!-- 5. Container -->
+                <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Container</span>
+                    <span id="statContainer" class="text-sm sm:text-base font-bold text-purple-400">0</span>
+                </div>
+                <!-- 6. % Used -->
+                <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">% Used</span>
+                    <span id="statUtilization" class="text-sm sm:text-base font-bold text-cyan-400">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. COMBINED CONTROL BAR: View Mode, Filter by Type, Sorting, Search in a single toolbar -->
+        <div class="bg-slate-900/90 border border-slate-800/90 p-1.5 sm:p-2 rounded-lg shadow-sm mb-3 flex flex-col md:flex-row items-stretch md:items-center gap-1.5 justify-between">
+            
+            <!-- Search Bar -->
+            <div class="relative flex-1 min-w-[130px]">
+                <input type="text" id="searchInput" oninput="render()" placeholder="Search IP, host, port, notes..." class="w-full bg-slate-950 text-[11px] text-slate-200 placeholder-slate-500 pl-7 pr-2 py-1 h-7 rounded-md border border-slate-800 focus:outline-none focus:border-emerald-500">
+                <svg class="w-3 h-3 absolute left-2 top-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+
+            <!-- Selectors Group -->
+            <div class="grid grid-cols-3 md:flex items-center gap-1 sm:gap-1.5 w-full md:w-auto">
+                <!-- View Mode Selector -->
+                <div>
+                    <select id="viewFilterSelect" onchange="setViewFilter(this.value)" class="w-full md:w-auto bg-slate-950 text-[11px] text-slate-300 border border-slate-800 rounded-md px-1.5 sm:px-2 py-1 h-7 focus:outline-none focus:border-emerald-500 truncate">
+                        <option value="all">All IPs</option>
+                        <option value="assigned">Assigned</option>
+                        <option value="active">Active</option>
+                    </select>
+                </div>
+
+                <!-- Filter by Type Selector -->
+                <div>
+                    <select id="typeFilterSelect" onchange="render()" class="w-full md:w-auto bg-slate-950 text-[11px] text-slate-300 border border-slate-800 rounded-md px-1.5 sm:px-2 py-1 h-7 focus:outline-none focus:border-emerald-500 truncate">
+                        <option value="all">All Types</option>
+                        <option value="Physical Hardware">Hardware</option>
+                        <option value="Macvlan Container">Macvlan</option>
+                        <option value="Shared/Host Container">Shared Host</option>
+                        <option value="Gateway / Router">Gateway</option>
+                        <option value="Infrastructure">Infra</option>
+                    </select>
+                </div>
+
+                <!-- Sorting Selector -->
+                <div>
+                    <select id="sortSelect" onchange="handleSortSelectChange(this.value)" class="w-full md:w-auto bg-slate-950 text-[11px] text-slate-300 border border-slate-800 rounded-md px-1.5 sm:px-2 py-1 h-7 focus:outline-none focus:border-emerald-500 truncate">
+                        <option value="ip-asc">Sort: IP ▲</option>
+                        <option value="ip-desc">Sort: IP ▼</option>
+                        <option value="name-asc">Sort: Name (A-Z)</option>
+                        <option value="name-desc">Sort: Name (Z-A)</option>
+                        <option value="type-asc">Sort: Type (A-Z)</option>
+                        <option value="type-desc">Sort: Type (Z-A)</option>
+                        <option value="ports-desc">Sort: Open Ports</option>
+                        <option value="ports-asc">Sort: Fewest Ports</option>
+                        <option value="status">Sort: Active First</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="text-[10px] text-slate-500 font-mono hidden xl:block self-center px-1 flex-shrink-0">
+                <span id="resultsCount">Showing 254 IPs</span>
+            </div>
+        </div>
+
+        <!-- Scanning Status Bar -->
+        <div id="scanStatus" class="hidden mb-4 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between animate-pulse">
+            <div class="flex items-center space-x-2.5">
+                <div class="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent flex-shrink-0"></div>
+                <span>Probing subnet 192.168.2.1-254... Synchronizing live Web UI titles & open port badges...</span>
+            </div>
+        </div>
+
+        <!-- 4. RESPONSIVE VIEWS: DESKTOP TABLE vs ULTRA-COMPACT MOBILE CARDS -->
+
+        <!-- DESKTOP TABLE VIEW (width > 768px: md:block) WITH TABLE HEADER SORT TOGGLES -->
+        <div class="hidden md:block bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-950/90 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px] select-none">
+                            <th class="py-2.5 px-3 w-40 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('ip')">
+                                <div class="flex items-center justify-between space-x-1">
+                                    <span>IP Address</span>
+                                    <span id="sortIndicator-ip" class="text-[10px] text-slate-500 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('name')">
+                                <div class="flex items-center justify-between space-x-1">
+                                    <span>Device / Host Name</span>
+                                    <span id="sortIndicator-name" class="text-[10px] text-slate-500 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th class="py-2.5 px-3 w-44 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('type')">
+                                <div class="flex items-center justify-between space-x-1">
+                                    <span>Type Badge</span>
+                                    <span id="sortIndicator-type" class="text-[10px] text-slate-500 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('ports')">
+                                <div class="flex items-center justify-between space-x-1">
+                                    <span>Port Summary Badges</span>
+                                    <span id="sortIndicator-ports" class="text-[10px] text-slate-500 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th class="py-2.5 px-3 w-24 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ipTableBody" class="divide-y divide-slate-800/50">
+                        <!-- Rendered via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ULTRA-COMPACT MOBILE CARDS VIEW (width <= 768px: md:hidden) -->
+        <div class="block md:hidden space-y-2" id="ipCardsContainer">
+            <!-- Rendered via JavaScript for mobile stacked cards -->
+        </div>
+
+    </main>
+
+    <!-- EDIT MODAL -->
+    <div id="editModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-xl p-4 sm:p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-base font-bold text-white">Edit IP Entry: <span id="modalIpDisplay" class="font-mono text-emerald-400"></span></h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            
+            <form id="editForm" onsubmit="saveIpData(event)" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">Hostname</label>
+                        <input type="text" id="modHostname" class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">Status</label>
+                        <select id="modStatus" class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                            <option value="Active">Active</option>
+                            <option value="Free">Free</option>
+                            <option value="Reserved">Reserved</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">Device Type Tag</label>
+                        <select id="modTypeTag" class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                            <option value="Physical Hardware">Physical Hardware</option>
+                            <option value="Macvlan Container">Macvlan Container</option>
+                            <option value="Shared/Host Container">Shared/Host Container</option>
+                            <option value="Gateway / Router">Gateway / Router</option>
+                            <option value="Infrastructure">Infrastructure</option>
+                            <option value="Unassigned">Unassigned</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-400 mb-1">MAC Address</label>
+                        <input type="text" id="modMac" class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-medium text-slate-400 mb-1">Notes</label>
+                    <textarea id="modNotes" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"></textarea>
+                </div>
+
+                <div class="border-t border-slate-800 pt-2.5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-slate-300">Nested Services & Web UIs</label>
+                        <button type="button" onclick="addServiceRow()" class="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded text-emerald-400">+ Add Port/App</button>
+                    </div>
+                    <div id="serviceList" class="space-y-2 max-h-36 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded">Cancel</button>
+                    <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT APP LOGIC -->
+    <script>
+        let ipRecords = [];
+        let viewFilter = 'all'; // 'all', 'assigned', 'active'
+        let currentEditIp = null;
+        let expandedIps = new Set();
+        let expandedRanges = new Set();
+
+        let sortKey = 'ip'; // 'ip', 'name', 'type', 'ports'
+        let sortDir = 'asc'; // 'asc', 'desc'
+
+        function isWebPort(port, protocol) {
+            if (protocol === 'http' || protocol === 'https') return true;
+            const webPorts = [80, 443, 8080, 8443, 9000, 3000, 8123, 5000, 9090, 8000, 9443, 7860, 8888, 3001, 8081];
+            return webPorts.includes(Number(port));
+        }
+
+        function toggleSettingsDropdown(e) {
+            if (e) e.stopPropagation();
+            const menu = document.getElementById('settingsDropdownMenu');
+            if (menu) menu.classList.toggle('hidden');
+        }
+
+        function closeSettingsDropdown() {
+            const menu = document.getElementById('settingsDropdownMenu');
+            if (menu) menu.classList.add('hidden');
+        }
+
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('settingsDropdownContainer');
+            if (container && !container.contains(e.target)) {
+                closeSettingsDropdown();
+            }
+        });
+
+        async function fetchIPs() {
+            try {
+                const res = await fetch('/api/ips');
+                ipRecords = await res.json();
+                updateStats();
+                render();
+            } catch (err) {
+                console.error("Failed to fetch IPs", err);
+            }
+        }
+
+        function updateStats() {
+            const total = ipRecords.length || 254;
+            const active = ipRecords.filter(r => r.status === 'Active').length;
+            const free = ipRecords.filter(r => r.status === 'Free').length;
+            const reserved = ipRecords.filter(r => r.status === 'Reserved').length;
+            const hardware = ipRecords.filter(r => (r.typeTag || r.type_tag) === 'Physical Hardware').length;
+            const container = ipRecords.filter(r => {
+                const tag = r.typeTag || r.type_tag;
+                return tag === 'Macvlan Container' || tag === 'Shared/Host Container';
+            }).length;
+            const utilization = ((total - free) / total * 100).toFixed(1) + '%';
+
+            document.getElementById('statActive').innerText = active;
+            document.getElementById('statFree').innerText = free;
+            document.getElementById('statHardware').innerText = hardware;
+            document.getElementById('statContainer').innerText = container;
+            document.getElementById('statUtilization').innerText = utilization;
+            document.getElementById('statReserved').innerText = reserved;
+        }
+
+        function setViewFilter(filter) {
+            viewFilter = filter;
+            const select = document.getElementById('viewFilterSelect');
+            if (select) select.value = filter;
+            render();
+        }
+
+        function handleSortSelectChange(val) {
+            const [k, d] = val.split('-');
+            if (k && d) {
+                sortKey = k;
+                sortDir = d;
+            } else if (val === 'status') {
+                sortKey = 'status';
+                sortDir = 'asc';
+            }
+            updateSortIndicators();
+            render();
+        }
+
+        function toggleSortHeader(key) {
+            if (sortKey === key) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortKey = key;
+                sortDir = key === 'ports' ? 'desc' : 'asc';
+            }
+
+            const select = document.getElementById('sortSelect');
+            if (select) {
+                select.value = `${sortKey}-${sortDir}`;
+            }
+
+            updateSortIndicators();
+            render();
+        }
+
+        function updateSortIndicators() {
+            ['ip', 'name', 'type', 'ports'].forEach(k => {
+                const el = document.getElementById(`sortIndicator-${k}`);
+                if (el) {
+                    if (sortKey === k) {
+                        el.innerText = sortDir === 'asc' ? '▲' : '▼';
+                        el.className = 'text-[10px] text-emerald-400 font-bold font-mono';
+                    } else {
+                        el.innerText = '▲▼';
+                        el.className = 'text-[10px] text-slate-500 font-mono';
+                    }
+                }
+            });
+        }
+
+        async function runScan() {
+            document.getElementById('scanStatus').classList.remove('hidden');
+            try {
+                await fetch('/api/scan', { method: 'POST' });
+                // Poll progress
+                const interval = setInterval(async () => {
+                    const progRes = await fetch('/api/scan/progress');
+                    if (progRes.ok) {
+                        const prog = await progRes.json();
+                        if (!prog.isScanning) {
+                            clearInterval(interval);
+                            document.getElementById('scanStatus').classList.add('hidden');
+                            await fetchIPs();
+                        }
+                    }
+                }, 500);
+            } catch (err) {
+                alert("Scan request failed");
+                document.getElementById('scanStatus').classList.add('hidden');
+            }
+        }
+
+        function toggleExpand(ip, e) {
+            if (e) e.stopPropagation();
+            if (expandedIps.has(ip)) {
+                expandedIps.delete(ip);
+            } else {
+                expandedIps.add(ip);
+            }
+            render();
+        }
+
+        function toggleRangeExpand(rangeKey, e) {
+            if (e) e.stopPropagation();
+            if (expandedRanges.has(rangeKey)) {
+                expandedRanges.delete(rangeKey);
+            } else {
+                expandedRanges.add(rangeKey);
+            }
+            render();
+        }
+
+        function openEditModalForNew() {
+            const firstFree = ipRecords.find(r => r.status === 'Free') || ipRecords[0];
+            if (firstFree) openEditModal(firstFree.ip);
+        }
+
+        function processIpDisplayItems(filteredRecords, isIpSort, viewFilter, hasSearchQuery) {
+            if (viewFilter !== 'all' || !isIpSort || hasSearchQuery) {
+                return filteredRecords.map(r => ({ type: 'single', record: r }));
+            }
+
+            const items = [];
+            let i = 0;
+            while (i < filteredRecords.length) {
+                const current = filteredRecords[i];
+                if (current.status === 'Free') {
+                    let j = i;
+                    while (j + 1 < filteredRecords.length && filteredRecords[j + 1].status === 'Free') {
+                        const ipCurr = parseInt(filteredRecords[j].ip.split('.').pop(), 10);
+                        const ipNext = parseInt(filteredRecords[j + 1].ip.split('.').pop(), 10);
+                        if (Math.abs(ipNext - ipCurr) === 1) {
+                            j++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (j > i) {
+                        const rangeKey = `${filteredRecords[i].ip}-${filteredRecords[j].ip}`;
+                        const rangeRecords = filteredRecords.slice(i, j + 1);
+                        
+                        if (expandedRanges.has(rangeKey)) {
+                            items.push({
+                                type: 'range-header',
+                                rangeKey,
+                                startIp: filteredRecords[i].ip,
+                                endIp: filteredRecords[j].ip,
+                                count: rangeRecords.length
+                            });
+                            rangeRecords.forEach(r => items.push({ type: 'single', record: r }));
+                        } else {
+                            items.push({
+                                type: 'range-collapsed',
+                                rangeKey,
+                                startIp: filteredRecords[i].ip,
+                                endIp: filteredRecords[j].ip,
+                                count: rangeRecords.length,
+                                firstRecord: filteredRecords[i]
+                            });
+                        }
+                        i = j + 1;
+                        continue;
+                    }
+                }
+                items.push({ type: 'single', record: current });
+                i++;
+            }
+            return items;
+        }
+
+        function render() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const typeFilter = document.getElementById('typeFilterSelect').value;
+
+            const tbody = document.getElementById('ipTableBody');
+            const cardsContainer = document.getElementById('ipCardsContainer');
+
+            tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
+
+            // Filter logic
+            let filtered = ipRecords.filter(r => {
+                const typeTag = r.type_tag || r.typeTag || 'Unassigned';
+                if (viewFilter === 'assigned' && r.status === 'Free') return false;
+                if (viewFilter === 'active' && r.status !== 'Active') return false;
+                if (typeFilter !== 'all' && typeTag !== typeFilter) return false;
+
+                if (query) {
+                    const matchIp = r.ip.toLowerCase().includes(query);
+                    const matchHost = (r.hostname || '').toLowerCase().includes(query);
+                    const matchNotes = (r.notes || '').toLowerCase().includes(query);
+                    const matchSvc = (r.services || []).some(s => s.name.toLowerCase().includes(query) || String(s.port).includes(query));
+                    return matchIp || matchHost || matchNotes || matchSvc;
+                }
+                return true;
+            });
+
+            // Sorting logic
+            filtered.sort((a, b) => {
+                const ipA = parseInt(a.ip.split('.').pop(), 10);
+                const ipB = parseInt(b.ip.split('.').pop(), 10);
+
+                if (sortKey === 'ip') {
+                    return sortDir === 'asc' ? ipA - ipB : ipB - ipA;
+                }
+                if (sortKey === 'name') {
+                    const nameA = a.hostname || 'zzz';
+                    const nameB = b.hostname || 'zzz';
+                    return sortDir === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+                }
+                if (sortKey === 'type') {
+                    const tagA = a.type_tag || a.typeTag || '';
+                    const tagB = b.type_tag || b.typeTag || '';
+                    return sortDir === 'asc' ? tagA.localeCompare(tagB) : tagB.localeCompare(tagA);
+                }
+                if (sortKey === 'ports') {
+                    const cntA = (a.services || []).length;
+                    const cntB = (b.services || []).length;
+                    return sortDir === 'asc' ? cntA - cntB : cntB - cntA;
+                }
+                if (sortKey === 'status') {
+                    const order = { 'Active': 1, 'Reserved': 2, 'Free': 3 };
+                    return (order[a.status] || 9) - (order[b.status] || 9);
+                }
+                return ipA - ipB;
+            });
+
+            document.getElementById('resultsCount').innerText = `Showing ${filtered.length} IPs`;
+
+            const isIpSort = sortKey === 'ip';
+            const displayItems = processIpDisplayItems(filtered, isIpSort, viewFilter, Boolean(query));
+
+            displayItems.forEach(item => {
+                if (item.type === 'range-collapsed') {
+                    // DESKTOP TABLE ROW FOR FREE RANGE WITH UNIFIED EDIT BUTTON
+                    const tr = document.createElement('tr');
+                    tr.className = 'h-9 border-b border-slate-800/50 bg-slate-950/30 hover:bg-slate-800/30 transition-colors select-none cursor-pointer';
+                    tr.onclick = (e) => toggleRangeExpand(item.rangeKey, e);
+                    tr.innerHTML = `
+                        <td class="py-1.5 px-3 font-mono font-bold text-slate-400 whitespace-nowrap opacity-60">
+                            <div class="flex items-center space-x-1.5">
+                                <span class="text-slate-500 font-bold text-xs">►</span>
+                                <span>${item.startIp} – ${item.endIp}</span>
+                            </div>
+                        </td>
+                        <td class="py-1.5 px-3 font-medium text-slate-500 italic">
+                            Unassigned Range (${item.count} IPs)
+                        </td>
+                        <td class="py-1.5 px-3 whitespace-nowrap opacity-50">
+                            <span class="text-[10px] px-2 py-0.5 rounded border border-slate-800 text-slate-500 font-medium">Unassigned</span>
+                        </td>
+                        <td class="py-1.5 px-3 text-slate-600 italic text-[11px]">-</td>
+                        <td class="py-1.5 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                            <button onclick="openEditModal('${item.firstRecord.ip}')" class="text-[10px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded font-medium shadow-sm transition-colors">
+                                Edit
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    // ULTRA-COMPACT MOBILE CARD FOR FREE RANGE
+                    const card = document.createElement('div');
+                    card.className = 'bg-slate-900/60 border border-slate-800/80 rounded-xl shadow-sm text-xs select-none overflow-hidden transition-colors cursor-pointer hover:border-slate-700';
+                    card.onclick = (e) => toggleRangeExpand(item.rangeKey, e);
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between px-3 py-2.5">
+                            <div class="flex items-center space-x-2 font-mono font-bold text-slate-400">
+                                <span class="text-slate-500 font-bold text-xs">►</span>
+                                <span>${item.startIp} – ${item.endIp}</span>
+                            </div>
+                            <div class="text-slate-500 italic text-xs text-right">
+                                Unassigned Range (${item.count} IPs)
+                            </div>
+                        </div>
+                    `;
+                    cardsContainer.appendChild(card);
+                    return;
+                }
+
+                if (item.type === 'range-header') {
+                    // DESKTOP RANGE HEADER
+                    const tr = document.createElement('tr');
+                    tr.className = 'h-8 border-b border-slate-800/80 bg-slate-900/90 text-slate-400 select-none cursor-pointer';
+                    tr.onclick = (e) => toggleRangeExpand(item.rangeKey, e);
+                    tr.innerHTML = `
+                        <td colspan="5" class="py-1 px-3 text-[11px] font-semibold text-emerald-400">
+                            <div class="flex items-center space-x-2">
+                                <span>▼ Expanded Range: ${item.startIp} – ${item.endIp} (${item.count} Unassigned IPs)</span>
+                                <span class="text-[10px] text-slate-500">(Click to collapse)</span>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    // MOBILE RANGE HEADER
+                    const card = document.createElement('div');
+                    card.className = 'bg-slate-900/90 border border-emerald-500/30 rounded-xl p-2.5 text-xs text-emerald-400 cursor-pointer flex items-center justify-between';
+                    card.onclick = (e) => toggleRangeExpand(item.rangeKey, e);
+                    card.innerHTML = `
+                        <span>▼ Range: ${item.startIp} – ${item.endIp} (${item.count} IPs)</span>
+                        <span class="text-[10px] text-slate-500">(Tap to collapse)</span>
+                    `;
+                    cardsContainer.appendChild(card);
+                    return;
+                }
+
+                // Single IP Item
+                const r = item.record;
+                const isFree = r.status === 'Free';
+                const hasServices = r.services && r.services.length > 0;
+                const isExpanded = expandedIps.has(r.ip);
+                const typeTag = r.type_tag || r.typeTag || 'Unassigned';
+
+                // Port Badges Desktop
+                let portsHtml = '<span class="text-slate-600 italic text-[11px]">-</span>';
+                if (hasServices) {
+                    portsHtml = `<div class="flex flex-wrap items-center gap-1">` +
+                        r.services.map(s => {
+                            const isWeb = isWebPort(s.port, s.protocol);
+                            const badgeClass = isWeb 
+                                ? 'bg-cyan-950/90 text-cyan-300 border-cyan-800/80 hover:border-cyan-400' 
+                                : 'bg-slate-800/90 text-slate-400 border-slate-700 hover:border-slate-500';
+                            const url = s.url || `http://${r.ip}:${s.port}`;
+                            return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" title="${s.name} (${s.protocol || 'http'})" class="inline-flex items-center font-mono font-bold text-[10px] px-1.5 py-0.5 rounded border transition-colors ${badgeClass}">
+                                :${s.port}
+                            </a>`;
+                        }).join('') + `</div>`;
+                }
+
+                // Port Badges Mobile
+                let portsMobileHtml = '<span class="text-slate-600 italic text-xs">No open ports</span>';
+                if (hasServices) {
+                    portsMobileHtml = `<div class="flex flex-wrap items-center gap-1 mt-0.5">` +
+                        r.services.map(s => {
+                            const isWeb = isWebPort(s.port, s.protocol);
+                            const badgeClass = isWeb 
+                                ? 'bg-cyan-950/90 text-cyan-300 border-cyan-800/80' 
+                                : 'bg-slate-800/90 text-slate-400 border-slate-700';
+                            const url = s.url || `http://${r.ip}:${s.port}`;
+                            return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" class="inline-flex items-center font-mono font-bold text-[10px] px-1.5 py-0.5 rounded border ${badgeClass}">
+                                :${s.port}
+                            </a>`;
+                        }).join('') + `</div>`;
+                }
+
+                // Type Style
+                const typeStyle = typeTag === 'Physical Hardware' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                                  typeTag === 'Macvlan Container' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                                  typeTag === 'Shared/Host Container' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                                  typeTag === 'Gateway / Router' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-slate-950 text-slate-500 border-slate-800';
+
+                const statusStyle = r.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' :
+                                    r.status === 'Reserved' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-slate-950 text-slate-500 border border-slate-800';
+
+                // --- 1. DESKTOP TABLE ROW WITH UNIFIED EDIT BUTTON ---
+                const tr = document.createElement('tr');
+                tr.className = `h-9 border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors select-none ${
+                    isFree ? 'opacity-40 hover:opacity-100 bg-slate-950/40' : 'bg-slate-900/60'
+                } ${hasServices ? 'cursor-pointer' : ''}`;
+
+                if (hasServices) {
+                    tr.onclick = (e) => toggleExpand(r.ip, e);
+                }
+
+                tr.innerHTML = `
+                    <td class="py-1.5 px-3 font-mono font-bold text-slate-100 whitespace-nowrap">
+                        <div class="flex items-center space-x-1.5">
+                            ${hasServices ? `<span class="text-emerald-400 font-bold text-xs">${isExpanded ? '▼' : '►'}</span>` : `<span class="w-3"></span>`}
+                            <span>${r.ip}</span>
+                        </div>
+                    </td>
+                    <td class="py-1.5 px-3 font-medium text-slate-200 truncate max-w-[180px]">
+                        ${r.hostname ? r.hostname : '<span class="text-slate-600 font-normal italic">Unassigned</span>'}
+                    </td>
+                    <td class="py-1.5 px-3 whitespace-nowrap">
+                        <span class="text-[10px] px-2 py-0.5 rounded border ${typeStyle} font-medium">${typeTag}</span>
+                    </td>
+                    <td class="py-1.5 px-3">
+                        ${portsHtml}
+                    </td>
+                    <td class="py-1.5 px-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                        <button onclick="openEditModal('${r.ip}')" class="text-[10px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded font-medium shadow-sm transition-colors">
+                            Edit
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                // Desktop Expanded Row
+                if (isExpanded && hasServices) {
+                    const subTr = document.createElement('tr');
+                    subTr.className = 'bg-slate-950/90 border-b border-slate-800';
+                    subTr.innerHTML = `
+                        <td colspan="5" class="p-3 pl-8">
+                            <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+                                    <span class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Hosted Services (${r.services.length})</span>
+                                    ${r.notes ? `<span class="text-xs text-slate-400 italic">${r.notes}</span>` : ''}
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left text-xs border-collapse">
+                                        <thead>
+                                            <tr class="bg-slate-950/80 text-slate-400 text-[10px] font-semibold uppercase tracking-wider border-b border-slate-800">
+                                                <th class="py-1.5 px-3">Service / App Name</th>
+                                                <th class="py-1.5 px-3">Internal Container / Bridge IP</th>
+                                                <th class="py-1.5 px-3">Port & Protocol</th>
+                                                <th class="py-1.5 px-3 text-right">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-800/60">
+                                            ${r.services.map(s => {
+                                                const isWeb = isWebPort(s.port, s.protocol);
+                                                const containerIp = s.container_ip || s.containerIp || `${r.ip}:${s.port}`;
+                                                const targetUrl = s.url || `http://${r.ip}:${s.port}`;
+                                                return `
+                                                    <tr class="hover:bg-slate-900/80">
+                                                        <td class="py-1.5 px-3 font-semibold text-slate-200">
+                                                            ${s.name}
+                                                        </td>
+                                                        <td class="py-1.5 px-3 font-mono text-[11px] text-slate-400">
+                                                            ${containerIp}
+                                                        </td>
+                                                        <td class="py-1.5 px-3 font-mono text-[11px]">
+                                                            <span class="${isWeb ? 'text-cyan-400 font-bold' : 'text-slate-400'}">:${s.port}</span>
+                                                            <span class="text-slate-500 text-[10px]">(${s.protocol || 'http'})</span>
+                                                        </td>
+                                                        <td class="py-1.5 px-3 text-right">
+                                                            <a href="${targetUrl}" target="_blank" onclick="event.stopPropagation()" class="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-medium transition-colors shadow-sm">
+                                                                <span>Open App</span>
+                                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(subTr);
+                }
+
+                // --- 2. ULTRA-COMPACT MOBILE STACKED CARD ---
+                // Displays ONLY IP Address and Hostname when unexpanded!
+                const card = document.createElement('div');
+                card.className = `bg-slate-900/90 border border-slate-800 rounded-xl shadow-sm text-xs select-none overflow-hidden transition-colors cursor-pointer hover:border-slate-700 ${
+                    isFree ? 'opacity-60 hover:opacity-100 bg-slate-950/40' : ''
+                }`;
+
+                card.onclick = (e) => toggleExpand(r.ip, e);
+
+                if (!isExpanded) {
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between px-3 py-2.5">
+                            <div class="flex items-center space-x-2 font-mono font-bold text-slate-100">
+                                <span class="text-slate-500 font-bold text-xs">${hasServices ? '►' : ''}</span>
+                                <span>${r.ip}</span>
+                            </div>
+                            <div class="text-slate-300 font-medium truncate max-w-[180px] text-right">
+                                ${r.hostname ? r.hostname : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between px-3 py-2.5 bg-slate-800/50 border-b border-slate-800">
+                            <div class="flex items-center space-x-2 font-mono font-bold text-slate-100">
+                                <span class="text-emerald-400 font-bold text-xs">▼</span>
+                                <span>${r.ip}</span>
+                            </div>
+                            <div class="text-slate-200 font-semibold truncate max-w-[180px] text-right">
+                                ${r.hostname ? r.hostname : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2.5">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[10px] px-2 py-0.5 rounded border ${typeStyle} font-medium">${typeTag}</span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${statusStyle}">${r.status}</span>
+                            </div>
+                            ${r.macAddress ? `<div class="text-[11px] text-slate-400 font-mono">MAC: ${r.macAddress}</div>` : ''}
+                            ${r.notes ? `<div class="text-[11px] text-slate-400 italic">${r.notes}</div>` : ''}
+                            <div>
+                                <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Port Summary</span>
+                                ${portsMobileHtml}
+                            </div>
+                            <div class="pt-2 border-t border-slate-800 flex justify-end" onclick="event.stopPropagation()">
+                                <button onclick="openEditModal('${r.ip}')" class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium rounded-lg shadow-sm transition-colors">
+                                    Edit
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+                cardsContainer.appendChild(card);
+            });
+        }
+
+        function openEditModal(ip) {
+            currentEditIp = ip;
+            const r = ipRecords.find(x => x.ip === ip);
+            if (!r) return;
+
+            document.getElementById('modalIpDisplay').innerText = ip;
+            document.getElementById('modHostname').value = r.hostname || '';
+            document.getElementById('modStatus').value = r.status || 'Active';
+            document.getElementById('modTypeTag').value = r.type_tag || r.typeTag || 'Physical Hardware';
+            document.getElementById('modMac').value = r.mac_address || r.macAddress || '';
+            document.getElementById('modNotes').value = r.notes || '';
+
+            const list = document.getElementById('serviceList');
+            list.innerHTML = '';
+            (r.services || []).forEach(s => addServiceRow(s.name, s.port, s.protocol, s.url));
+
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        function addServiceRow(name = '', port = '', protocol = 'http', url = '') {
+            const container = document.getElementById('serviceList');
+            const row = document.createElement('div');
+            row.className = 'flex items-center space-x-2 bg-slate-950 p-1.5 rounded border border-slate-800';
+            row.innerHTML = `
+                <input type="text" placeholder="Service Name" value="${name}" class="svc-name flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200">
+                <input type="number" placeholder="Port" value="${port}" class="svc-port w-20 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 font-mono">
+                <select class="svc-proto bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200">
+                    <option value="http" ${protocol === 'http' ? 'selected' : ''}>http</option>
+                    <option value="https" ${protocol === 'https' ? 'selected' : ''}>https</option>
+                    <option value="tcp" ${protocol === 'tcp' ? 'selected' : ''}>tcp</option>
+                </select>
+                <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 px-1 text-lg leading-none">&times;</button>
+            `;
+            container.appendChild(row);
+        }
+
+        async function saveIpData(e) {
+            e.preventDefault();
+            if (!currentEditIp) return;
+
+            const serviceRows = document.querySelectorAll('#serviceList > div');
+            const services = [];
+            serviceRows.forEach(row => {
+                const name = row.querySelector('.svc-name').value.trim();
+                const port = parseInt(row.querySelector('.svc-port').value);
+                const proto = row.querySelector('.svc-proto').value;
+                if (name && port) {
+                    services.push({
+                        name,
+                        port,
+                        protocol: proto,
+                        url: `${proto}://${currentEditIp}:${port}`
+                    });
+                }
+            });
+
+            const payload = {
+                hostname: document.getElementById('modHostname').value.trim(),
+                status: document.getElementById('modStatus').value,
+                type_tag: document.getElementById('modTypeTag').value,
+                typeTag: document.getElementById('modTypeTag').value,
+                mac_address: document.getElementById('modMac').value.trim(),
+                macAddress: document.getElementById('modMac').value.trim(),
+                notes: document.getElementById('modNotes').value.trim(),
+                services
+            };
+
+            await fetch(`/api/ips/${currentEditIp}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            closeModal();
+            fetchIPs();
+        }
+
+        function toggleThemeMode() {
+            const isLight = document.documentElement.classList.toggle('light-mode');
+            const label = document.getElementById('themeModeLabel');
+            if (label) {
+                if (isLight) {
+                    label.innerHTML = `<svg class="w-3.5 h-3.5 mr-2 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> Theme: Light ☀️`;
+                } else {
+                    label.innerHTML = `<svg class="w-3.5 h-3.5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg> Theme: Dark 🌙`;
+                }
+            }
+        }
+
+        updateSortIndicators();
+        fetchIPs();
+    </script>
+</body>
+</html>

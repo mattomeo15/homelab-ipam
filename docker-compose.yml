@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  ipam:
+    build: .
+    container_name: homelab-ipam
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=America/New_York
+      - PUID=0
+      - PGID=0
+      - PORT=8080
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
