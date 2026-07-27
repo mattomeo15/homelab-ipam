@@ -276,15 +276,52 @@ export default function App() {
           showingCount={processedRecords.length}
         />
 
-        {/* Scanning Banner */}
+        {/* Scanning Banner with Real-Time Progress Bar */}
         {scanProgress.isScanning && (
-          <div className="mb-4 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between animate-pulse">
-            <div className="flex items-center space-x-2.5">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent"></div>
-              <span>
-                Probing subnet 192.168.2.1-254... Scanned {scanProgress.scannedCount}/254 IPs
-              </span>
+          <div className="mb-4 p-3.5 bg-slate-900 border border-emerald-500/30 rounded-xl shadow-lg relative overflow-hidden transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div className="flex items-center space-x-2.5">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent flex-shrink-0"></div>
+                <div>
+                  <div className="font-bold text-xs text-white flex items-center space-x-2">
+                    <span>Subnet Auto-Discovery Scan Active</span>
+                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono font-semibold">
+                      +{scanProgress.discoveredServices} Discovered
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Probing Target: <span className="font-mono text-emerald-400 font-bold">{scanProgress.currentIp || '192.168.2.1'}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 text-xs font-mono self-end sm:self-center">
+                <span className="text-slate-200 font-bold">
+                  {Math.min(100, Math.round((scanProgress.scannedCount / scanProgress.total) * 100))}% ({scanProgress.scannedCount}/{scanProgress.total} IPs)
+                </span>
+              </div>
             </div>
+
+            {/* Real-Time Progress Bar Track & Fill */}
+            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-600 via-teal-400 to-emerald-300 rounded-full transition-all duration-300 shadow-sm"
+                style={{
+                  width: `${Math.min(100, Math.round((scanProgress.scannedCount / scanProgress.total) * 100))}%`,
+                }}
+              ></div>
+            </div>
+
+            {/* Live Terminal Log Line */}
+            {scanProgress.log.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                <span className="truncate max-w-[85%] text-slate-400 italic">
+                  {scanProgress.log[scanProgress.log.length - 1]}
+                </span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider hidden sm:inline">
+                  Live Feed
+                </span>
+              </div>
+            )}
           </div>
         )}
 

@@ -258,11 +258,35 @@
             </div>
         </div>
 
-        <!-- Scanning Status Bar -->
-        <div id="scanStatus" class="hidden mb-4 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between animate-pulse">
-            <div class="flex items-center space-x-2.5">
-                <div class="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent flex-shrink-0"></div>
-                <span>Probing subnet 192.168.2.1-254... Synchronizing live Web UI titles & open port badges...</span>
+        <!-- Real-Time Subnet Scan Progress Bar -->
+        <div id="scanStatus" class="hidden mb-4 p-3.5 bg-slate-900 border border-emerald-500/30 rounded-xl shadow-lg relative overflow-hidden transition-all">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                <div class="flex items-center space-x-2.5">
+                    <div class="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent flex-shrink-0"></div>
+                    <div>
+                        <div class="font-bold text-xs text-white flex items-center space-x-2">
+                            <span>Subnet Auto-Discovery Scan Active</span>
+                            <span id="scanDiscoveredBadge" class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono font-semibold">+0 Discovered</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">
+                            Probing Target: <span id="scanCurrentIp" class="font-mono text-emerald-400 font-bold">192.168.2.1</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 text-xs font-mono self-end sm:self-center">
+                    <span id="scanPercentText" class="text-slate-200 font-bold">0% (0/254 IPs)</span>
+                </div>
+            </div>
+
+            <!-- Real-Time Progress Bar Track & Fill -->
+            <div class="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                <div id="scanProgressBar" class="h-full bg-gradient-to-r from-emerald-600 via-teal-400 to-emerald-300 rounded-full transition-all duration-300 shadow-sm" style="width: 0%"></div>
+            </div>
+
+            <!-- Live Terminal Output Line -->
+            <div class="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                <span id="scanLogText" class="truncate max-w-[85%] text-slate-400 italic">Initializing scanner...</span>
+                <span class="text-[10px] text-slate-500 uppercase tracking-wider hidden sm:inline">Live Feed</span>
             </div>
         </div>
 
@@ -497,7 +521,20 @@
         }
 
         async function runScan() {
-            document.getElementById('scanStatus').classList.remove('hidden');
+            const statusEl = document.getElementById('scanStatus');
+            const barEl = document.getElementById('scanProgressBar');
+            const percentEl = document.getElementById('scanPercentText');
+            const currentIpEl = document.getElementById('scanCurrentIp');
+            const badgeEl = document.getElementById('scanDiscoveredBadge');
+            const logEl = document.getElementById('scanLogText');
+
+            statusEl.classList.remove('hidden');
+            if (barEl) barEl.style.width = '0%';
+            if (percentEl) percentEl.innerText = '0% (0/254 IPs)';
+            if (currentIpEl) currentIpEl.innerText = '192.168.2.1';
+            if (badgeEl) badgeEl.innerText = '+0 Discovered';
+            if (logEl) logEl.innerText = 'Initializing subnet scan...';
+
             try {
                 await fetch('/api/scan', { method: 'POST' });
                 // Poll progress
@@ -505,16 +542,32 @@
                     const progRes = await fetch('/api/scan/progress');
                     if (progRes.ok) {
                         const prog = await progRes.json();
+                        const total = prog.total || 254;
+                        const count = prog.scannedCount || 0;
+                        const percent = Math.min(100, Math.round((count / total) * 100));
+
+                        if (barEl) barEl.style.width = `${percent}%`;
+                        if (percentEl) percentEl.innerText = `${percent}% (${count}/${total} IPs)`;
+                        if (currentIpEl && prog.currentIp) currentIpEl.innerText = prog.currentIp;
+                        if (badgeEl) badgeEl.innerText = `+${prog.discoveredServices || 0} Discovered`;
+                        if (logEl && prog.log && prog.log.length > 0) {
+                            logEl.innerText = prog.log[prog.log.length - 1];
+                        }
+
                         if (!prog.isScanning) {
                             clearInterval(interval);
-                            document.getElementById('scanStatus').classList.add('hidden');
+                            if (barEl) barEl.style.width = '100%';
+                            if (percentEl) percentEl.innerText = '100% (254/254 IPs)';
+                            setTimeout(() => {
+                                statusEl.classList.add('hidden');
+                            }, 1000);
                             await fetchIPs();
                         }
                     }
-                }, 500);
+                }, 300);
             } catch (err) {
                 alert("Scan request failed");
-                document.getElementById('scanStatus').classList.add('hidden');
+                statusEl.classList.add('hidden');
             }
         }
 
