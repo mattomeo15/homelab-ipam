@@ -154,6 +154,13 @@
                             Export JSON Backup
                         </a>
                     </div>
+                    <div class="py-1">
+                        <div class="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Data Reset</div>
+                        <button onclick="confirmClearData(); closeSettingsDropdown();" class="w-full text-left flex items-center px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-medium">
+                            <svg class="w-3.5 h-3.5 mr-2 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Clear Saved Data
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1027,6 +1034,22 @@
 
         if (localStorage.getItem('ipam_theme') === 'light') {
             applyTheme(true);
+        }
+
+        async function confirmClearData() {
+            if (confirm("Are you sure you want to clear all saved IPAM data? This will reset all IP records, hostnames, notes, and custom services to default factory state.")) {
+                try {
+                    const res = await fetch('/api/clear', { method: 'POST' });
+                    if (res.ok) {
+                        alert("All saved IPAM data has been cleared.");
+                        fetchIPs();
+                    } else {
+                        alert("Failed to clear data.");
+                    }
+                } catch (e) {
+                    alert("Error clearing data: " + e.message);
+                }
+            }
         }
 
         updateSortIndicators();

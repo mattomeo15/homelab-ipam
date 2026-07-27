@@ -39,6 +39,16 @@ async function startServer() {
     res.json(getScanProgress());
   });
 
+  app.post('/api/clear', (req, res) => {
+    store.clearAll();
+    res.json({ message: 'All saved IPAM data has been cleared successfully' });
+  });
+
+  app.delete('/api/clear', (req, res) => {
+    store.clearAll();
+    res.json({ message: 'All saved IPAM data has been cleared successfully' });
+  });
+
   // Alias routes for exports
   app.get('/export/md', (req, res) => res.redirect('/api/export/md'));
   app.get('/export/txt', (req, res) => res.redirect('/api/export/txt'));

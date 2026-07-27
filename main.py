@@ -281,6 +281,16 @@ async def trigger_scan():
         asyncio.create_task(perform_background_scan())
     return {"message": "Scan started", "status": scan_progress}
 
+@app.post("/api/clear")
+@app.delete("/api/clear")
+async def clear_all_data():
+    conn = get_db_connection()
+    conn.execute("DELETE FROM ips")
+    conn.commit()
+    conn.close()
+    init_db()
+    return {"message": "All saved IPAM data has been cleared successfully"}
+
 @app.get("/api/scan/progress")
 async def get_scan_progress():
     return scan_progress

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Network, Play, Plus, FileText, Code2, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Network, Play, Plus, FileText, Code2, ChevronDown, Sun, Moon, Trash2 } from 'lucide-react';
 
 interface HeaderProps {
   subnet: string;
@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenAddModal: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  onClearData: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAddModal,
   theme,
   onToggleTheme,
+  onClearData,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
 
-              {/* Export Tools */}
+              {/* Export Tools & Data Management */}
               <div className="py-1">
                 <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                   Export Tools
@@ -143,6 +145,23 @@ export const Header: React.FC<HeaderProps> = ({
                   <Code2 className="w-3.5 h-3.5 mr-2 text-cyan-400" />
                   Export JSON Backup
                 </a>
+              </div>
+
+              {/* Reset & Clear */}
+              <div className="py-1">
+                <div className="px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Data Reset
+                </div>
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onClearData();
+                  }}
+                  className="w-full text-left flex items-center px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-medium"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2 text-rose-400" />
+                  Clear Saved Data
+                </button>
               </div>
             </div>
           )}

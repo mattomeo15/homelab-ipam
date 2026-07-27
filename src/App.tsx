@@ -114,6 +114,23 @@ export default function App() {
     }
   };
 
+  const handleClearData = async () => {
+    if (window.confirm('Are you sure you want to clear all saved IPAM data? This will reset all IP records, hostnames, notes, and custom services to default factory state.')) {
+      try {
+        const res = await fetch('/api/clear', { method: 'POST' });
+        if (res.ok) {
+          alert('All saved IPAM data has been cleared.');
+          await fetchData();
+        } else {
+          alert('Failed to clear data.');
+        }
+      } catch (err) {
+        console.error('Failed to clear data:', err);
+        alert('Error clearing data.');
+      }
+    }
+  };
+
   const handleSaveIpRecord = async (ip: string, updated: Partial<IPRecord>) => {
     try {
       const res = await fetch(`/api/ips/${ip}`, {
@@ -234,6 +251,7 @@ export default function App() {
         isScanning={scanProgress.isScanning}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        onClearData={handleClearData}
         onOpenAddModal={() => {
           const firstFree = ipRecords.find((r) => r.status === 'Free') || ipRecords[0];
           if (firstFree) handleOpenEditModal(firstFree);

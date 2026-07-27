@@ -177,6 +177,10 @@ export class IPAMStore {
     this.saveData();
   }
 
+  public clearAll() {
+    this.seedDefaults();
+  }
+
   public saveData() {
     try {
       const arr = Array.from(this.records.values());
