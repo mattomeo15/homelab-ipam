@@ -5,6 +5,7 @@ import { StatsBar } from './components/StatsBar';
 import { FilterToolbar } from './components/FilterToolbar';
 import { IpTable } from './components/IpTable';
 import { EditIpModal } from './components/EditIpModal';
+import { ClearConfirmModal } from './components/ClearConfirmModal';
 import { Server } from 'lucide-react';
 
 export default function App() {
@@ -34,6 +35,8 @@ export default function App() {
 
   const [editModalRecord, setEditModalRecord] = useState<IPRecord | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
 
   // Light / Dark Theme Mode
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -113,20 +116,25 @@ export default function App() {
     }
   };
 
-  const handleClearData = async () => {
-    if (window.confirm('Are you sure you want to clear all saved IP-Freely data? This will reset all IP records, hostnames, notes, and custom services to default factory state.')) {
-      try {
-        const res = await fetch('/api/clear', { method: 'POST' });
-        if (res.ok) {
-          alert('All saved IP-Freely data has been cleared.');
-          await fetchData();
-        } else {
-          alert('Failed to clear data.');
-        }
-      } catch (err) {
-        console.error('Failed to clear data:', err);
-        alert('Error clearing data.');
+  const handleClearData = () => {
+    setIsClearModalOpen(true);
+  };
+
+  const handleConfirmClear = async () => {
+    setIsClearing(true);
+    try {
+      const res = await fetch('/api/clear', { method: 'POST' });
+      if (res.ok) {
+        setIsClearModalOpen(false);
+        await fetchData();
+      } else {
+        alert('Failed to clear data.');
       }
+    } catch (err) {
+      console.error('Failed to clear data:', err);
+      alert('Error clearing data.');
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -350,6 +358,14 @@ export default function App() {
         onClose={() => setIsEditModalOpen(false)}
         record={editModalRecord}
         onSave={handleSaveIpRecord}
+      />
+
+      {/* Clear Data Confirmation Modal */}
+      <ClearConfirmModal
+        isOpen={isClearModalOpen}
+        onClose={() => setIsClearModalOpen(false)}
+        onConfirm={handleConfirmClear}
+        isLoading={isClearing}
       />
     </div>
   );

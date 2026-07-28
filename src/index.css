@@ -215,7 +215,8 @@ html.light-mode .fixed.inset-0.bg-slate-950\/80 {
 }
 
 html.light-mode #settingsDropdownMenu,
-html.light-mode #editModal > div > div {
+html.light-mode #editModal > div > div,
+html.light-mode #clearConfirmModal > div > div {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   color: #0f172a !important;
