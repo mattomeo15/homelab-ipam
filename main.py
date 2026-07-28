@@ -15,7 +15,7 @@ from exporter import generate_markdown_export, generate_text_export
 DB_PATH = "/data/ipam.db"
 os.makedirs("/data", exist_ok=True)
 
-app = FastAPI(title="Homelab IPAM")
+app = FastAPI(title="IP-Freely")
 
 # SQLite DB Initialization
 def init_db():
@@ -77,6 +77,9 @@ async def get_favicon():
     if os.path.exists("public/favicon.png"):
         from fastapi.responses import FileResponse
         return FileResponse("public/favicon.png", media_type="image/png")
+    if os.path.exists("public/logo.png"):
+        from fastapi.responses import FileResponse
+        return FileResponse("public/logo.png", media_type="image/png")
     raise HTTPException(status_code=404, detail="Favicon not found")
 
 @app.get("/logo.png")
@@ -279,7 +282,7 @@ async def clear_all_data():
     conn.commit()
     conn.close()
     init_db()
-    return {"message": "All saved IPAM data has been cleared successfully"}
+    return {"message": "All saved IP-Freely data has been cleared successfully"}
 
 @app.get("/api/scan/progress")
 async def get_scan_progress():

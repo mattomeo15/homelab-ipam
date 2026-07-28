@@ -1,6 +1,6 @@
 {
-  "name": "Homelab IP Address Manager",
-  "description": "Lightweight single-container IP Address Management (IPAM) web app for homelab subnets (192.168.2.1-254) with auto-discovery, Web UI title detection, nested service tracking, and Markdown/TXT export.",
+  "name": "IP-Freely",
+  "description": "IP-Freely - Lightweight single-container IP Address Management (IPAM) web app for homelab subnets (192.168.2.1-254) with auto-discovery, Web UI title detection, nested service tracking, and Markdown/TXT export.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

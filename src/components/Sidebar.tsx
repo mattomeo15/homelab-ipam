@@ -34,7 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Network className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white leading-tight">HOMELAB IPAM</h1>
+            <h1 className="text-base font-bold tracking-tight text-white leading-tight">IP-FREELY</h1>
             <p className="text-[10px] text-emerald-400 font-mono font-semibold">{stats.subnet}</p>
           </div>
         </div>

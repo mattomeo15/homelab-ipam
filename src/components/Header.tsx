@@ -41,14 +41,14 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <img
             src="/logo.png"
-            alt="Homelab IPAM Logo"
+            alt="IP-Freely Logo"
             className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-lg flex-shrink-0"
             referrerPolicy="no-referrer"
           />
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5 sm:space-x-2">
               <h1 className="text-xs sm:text-base font-bold tracking-tight text-white leading-tight truncate">
-                HOMELAB IPAM
+                IP-FREELY
               </h1>
               <span className="text-[9px] sm:text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-semibold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0">
                 {subnet || '192.168.2.0/24'}

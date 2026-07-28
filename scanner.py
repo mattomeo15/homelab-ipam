@@ -81,7 +81,7 @@ COMMON_PORTS = {
     9090: "Cockpit / Prometheus",
     9091: "Transmission Torrent",
     9696: "Prowlarr",
-    22300: "Homelab App",
+    22300: "IP-Freely App",
     32400: "Plex Media Server",
     62078: "Apple Mobile Device Sync"
 }

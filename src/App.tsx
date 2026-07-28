@@ -67,7 +67,7 @@ export default function App() {
         setStats(statsData);
       }
     } catch (err) {
-      console.error('Failed to load IPAM inventory:', err);
+      console.error('Failed to load IP-Freely inventory:', err);
     }
   };
 
@@ -114,11 +114,11 @@ export default function App() {
   };
 
   const handleClearData = async () => {
-    if (window.confirm('Are you sure you want to clear all saved IPAM data? This will reset all IP records, hostnames, notes, and custom services to default factory state.')) {
+    if (window.confirm('Are you sure you want to clear all saved IP-Freely data? This will reset all IP records, hostnames, notes, and custom services to default factory state.')) {
       try {
         const res = await fetch('/api/clear', { method: 'POST' });
         if (res.ok) {
-          alert('All saved IPAM data has been cleared.');
+          alert('All saved IP-Freely data has been cleared.');
           await fetchData();
         } else {
           alert('Failed to clear data.');

@@ -42,7 +42,7 @@ const COMMON_PORTS: Record<number, string> = {
   9090: 'Cockpit / Prometheus',
   9091: 'Transmission Web',
   9696: 'Prowlarr',
-  22300: 'Homelab Web App',
+  22300: 'IP-Freely App',
   32400: 'Plex Media Server',
   62078: 'Apple Mobile Device Sync'
 };
@@ -107,7 +107,7 @@ function fetchWebTitle(host: string, port: number, timeoutMs = 1200): Promise<st
         timeout: timeoutMs,
         rejectUnauthorized: false,
         headers: {
-          'User-Agent': 'Homelab-IPAM-Scanner/1.0 (Mozilla/5.0)'
+          'User-Agent': 'IP-Freely-Scanner/1.0 (Mozilla/5.0)'
         }
       },
       (res) => {

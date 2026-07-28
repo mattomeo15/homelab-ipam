@@ -115,7 +115,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           <div>
             <h3 className="text-base font-semibold text-white flex items-center">
               <ClipboardList className="w-5 h-5 mr-2 text-emerald-400" />
-              Import Homelab Inventory
+              Import IP-Freely Inventory
             </h3>
             <p className="text-[11px] text-slate-400 mt-1">
               Bypass local cloud scanner isolation by importing or pasting your local IPAM markdown inventory.
@@ -178,7 +178,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <textarea
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              placeholder="# Homelab IPAM Inventory&#10;&#10;## Gateway / Router&#10;| IP Address | Hostname | Status | Services & Ports | MAC Address | Notes |&#10;|:---|:---|:---|:---|:---|:---|&#10;| `192.168.2.1` | `omada-controller` | **Active** | [Omada (443)](https://...) | `AA:BB:CC:...` | ..."
+              placeholder="# IP-Freely Inventory&#10;&#10;## Gateway / Router&#10;| IP Address | Hostname | Status | Services & Ports | MAC Address | Notes |&#10;|:---|:---|:---|:---|:---|:---|&#10;| `192.168.2.1` | `omada-controller` | **Active** | [Omada (443)](https://...) | `AA:BB:CC:...` | ..."
               className="w-full flex-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none resize-none min-h-[160px]"
             />
           </div>
