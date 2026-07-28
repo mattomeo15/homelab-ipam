@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IP-Freely</title>
-    <link rel="icon" type="image/png" href="/logo.png" />
-    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -332,32 +332,32 @@
             <div class="grid grid-cols-3 sm:grid-cols-6 text-xs font-mono divide-y sm:divide-y-0 divide-slate-800/80">
                 <!-- 1. Active -->
                 <div class="p-1.5 sm:p-2 text-center">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Active</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">ACTIVE IPS</span>
                     <span id="statActive" class="text-sm sm:text-base font-bold text-emerald-400">0</span>
                 </div>
                 <!-- 2. Reserved -->
                 <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Reserved</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">RESERVED IPS</span>
                     <span id="statReserved" class="text-sm sm:text-base font-bold text-amber-400">0</span>
                 </div>
                 <!-- 3. Available -->
                 <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Available</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">AVAILABLE IPS</span>
                     <span id="statFree" class="text-sm sm:text-base font-bold text-slate-300">0</span>
                 </div>
                 <!-- 4. Hardware -->
                 <div class="p-1.5 sm:p-2 text-center sm:border-l border-slate-800/80">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Hardware</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">DEVICES</span>
                     <span id="statHardware" class="text-sm sm:text-base font-bold text-blue-400">0</span>
                 </div>
                 <!-- 5. Container -->
                 <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">Container</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">CONTAINERS</span>
                     <span id="statContainer" class="text-sm sm:text-base font-bold text-purple-400">0</span>
                 </div>
                 <!-- 6. % Used -->
                 <div class="p-1.5 sm:p-2 text-center border-l border-slate-800/80">
-                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">% Used</span>
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">IP % USED</span>
                     <span id="statUtilization" class="text-sm sm:text-base font-bold text-cyan-400">0%</span>
                 </div>
             </div>
@@ -458,29 +458,29 @@
                         <tr class="bg-slate-950/90 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px] select-none">
                             <th class="py-2.5 px-3 w-40 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('ip')">
                                 <div class="flex items-center justify-between space-x-1">
-                                    <span>IP Address</span>
+                                    <span>IP ADDRESS</span>
                                     <span id="sortIndicator-ip" class="text-[10px] text-slate-500 font-mono">▲▼</span>
                                 </div>
                             </th>
                             <th class="py-2.5 px-3 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('name')">
                                 <div class="flex items-center justify-between space-x-1">
-                                    <span>Device / Host Name</span>
+                                    <span>HOST</span>
                                     <span id="sortIndicator-name" class="text-[10px] text-slate-500 font-mono">▲▼</span>
                                 </div>
                             </th>
                             <th class="py-2.5 px-3 w-44 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('type')">
                                 <div class="flex items-center justify-between space-x-1">
-                                    <span>Type Badge</span>
+                                    <span>TYPE</span>
                                     <span id="sortIndicator-type" class="text-[10px] text-slate-500 font-mono">▲▼</span>
                                 </div>
                             </th>
                             <th class="py-2.5 px-3 cursor-pointer hover:text-white transition-colors" onclick="toggleSortHeader('ports')">
                                 <div class="flex items-center justify-between space-x-1">
-                                    <span>Port Summary Badges</span>
+                                    <span>PORT</span>
                                     <span id="sortIndicator-ports" class="text-[10px] text-slate-500 font-mono">▲▼</span>
                                 </div>
                             </th>
-                            <th class="py-2.5 px-3 w-24 text-right">Actions</th>
+                            <th class="py-2.5 px-3 w-24 text-right">ACTION</th>
                         </tr>
                     </thead>
                     <tbody id="ipTableBody" class="divide-y divide-slate-800/50">

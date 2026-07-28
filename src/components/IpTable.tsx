@@ -172,7 +172,7 @@ export const IpTable: React.FC<IpTableProps> = ({
                   onClick={() => onSortToggle('ip')}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>IP Address</span>
+                    <span>IP ADDRESS</span>
                     <span
                       className={`text-[10px] font-mono ${
                         sortMode.startsWith('ip')
@@ -193,7 +193,7 @@ export const IpTable: React.FC<IpTableProps> = ({
                   onClick={() => onSortToggle('name')}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>Device / Host Name</span>
+                    <span>HOST</span>
                     <span
                       className={`text-[10px] font-mono ${
                         sortMode.startsWith('name')
@@ -214,7 +214,7 @@ export const IpTable: React.FC<IpTableProps> = ({
                   onClick={() => onSortToggle('type')}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>Type Badge</span>
+                    <span>TYPE</span>
                     <span
                       className={`text-[10px] font-mono ${
                         sortMode.startsWith('type') || sortMode === 'type'
@@ -235,7 +235,7 @@ export const IpTable: React.FC<IpTableProps> = ({
                   onClick={() => onSortToggle('ports')}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>Port Summary Badges</span>
+                    <span>PORT</span>
                     <span
                       className={`text-[10px] font-mono ${
                         sortMode.startsWith('ports')
@@ -251,7 +251,7 @@ export const IpTable: React.FC<IpTableProps> = ({
                     </span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3 w-28 text-right">Actions</th>
+                <th className="py-2.5 px-3 w-28 text-right">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
