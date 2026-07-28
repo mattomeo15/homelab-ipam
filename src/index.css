@@ -1,32 +1,38 @@
 @import "tailwindcss";
 
-/* High-Contrast Professional Light Mode Theme */
+/* High-Contrast Professional Light Mode Theme (UI/UX Refactored) */
 html.light-mode {
   color-scheme: light;
 }
 
-/* Page Background & Body Base */
+/* 1. Page Background & Body Base (Cool Slate-50) */
 html.light-mode body,
-html.light-mode #root,
-html.light-mode .bg-slate-950 {
+html.light-mode #root {
   background-color: #f8fafc !important; /* slate-50 */
   color: #0f172a !important; /* slate-900 */
 }
 
-/* Header, Navbar, Cards & Toolbars */
+/* 2. Main Card Containers & Headers (Pure White Pop off Slate-50) */
 html.light-mode header,
+html.light-mode .bg-slate-900,
 html.light-mode .bg-slate-900\/90,
-html.light-mode .bg-slate-900 {
+html.light-mode .bg-slate-900\/80,
+html.light-mode .bg-slate-900\/60,
+html.light-mode .bg-slate-950,
+html.light-mode .bg-slate-950\/90,
+html.light-mode .bg-slate-950\/80,
+html.light-mode .bg-slate-850 {
   background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #e2e8f0 !important; /* slate-200 */
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05) !important;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.03) !important;
 }
 
-/* Universal Borders & Dividers in Light Mode */
+/* 3. Universal Borders & Dividers */
 html.light-mode .border-slate-800,
 html.light-mode .border-slate-800\/90,
 html.light-mode .border-slate-800\/80,
+html.light-mode .border-slate-800\/60,
 html.light-mode .border-slate-800\/50,
 html.light-mode .border-slate-800\/40,
 html.light-mode .border-slate-800\/30,
@@ -35,46 +41,136 @@ html.light-mode .border-slate-700 {
 }
 
 html.light-mode .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
-html.light-mode .divide-slate-800\/80 > :not([hidden]) ~ :not([hidden]) {
+html.light-mode .divide-slate-800\/80 > :not([hidden]) ~ :not([hidden]),
+html.light-mode .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]),
+html.light-mode .divide-slate-800\/50 > :not([hidden]) ~ :not([hidden]) {
   border-color: #e2e8f0 !important;
 }
 
-/* Buttons, Control Containers & Dark Pills */
-html.light-mode .bg-slate-800,
-html.light-mode .bg-slate-800\/80,
-html.light-mode .bg-slate-800\/50 {
-  background-color: #f1f5f9 !important; /* slate-100 */
-  color: #1e293b !important; /* slate-800 */
-  border-color: #cbd5e1 !important; /* slate-300 */
+/* 4. Top Metric Cards Section - Standardized Neutral Numbers */
+html.light-mode #statFree,
+html.light-mode #statHardware,
+html.light-mode #statContainer,
+html.light-mode #statUtilization,
+html.light-mode .stat-value-neutral {
+  color: #0f172a !important; /* Dark slate for neutral numbers */
 }
 
-html.light-mode .hover\:bg-slate-800:hover {
-  background-color: #e2e8f0 !important; /* slate-200 */
+html.light-mode #statActive {
+  color: #059669 !important; /* Status Emerald Green */
 }
 
-html.light-mode .hover\:bg-slate-700:hover {
-  background-color: #cbd5e1 !important; /* slate-300 */
+html.light-mode #statReserved {
+  color: #d97706 !important; /* Status Amber */
 }
 
-/* Table Specific Light Mode Styling */
-html.light-mode table thead tr,
-html.light-mode .bg-slate-950\/90 {
-  background-color: #f1f5f9 !important; /* slate-100 */
-  color: #334155 !important; /* slate-700 header text */
+/* 5. Table & Text Readability Enhancements */
+html.light-mode table thead tr {
+  background-color: #f8fafc !important; /* slate-50 header */
+  color: #475569 !important; /* slate-600 */
   border-bottom-color: #cbd5e1 !important;
 }
 
 html.light-mode table tbody tr {
   background-color: #ffffff !important;
-  color: #0f172a !important;
+  color: #1f2937 !important; /* dark slate/gray-800 primary text */
   border-bottom-color: #e2e8f0 !important;
 }
 
 html.light-mode table tbody tr:hover {
-  background-color: #f8fafc !important; /* soft hover background */
+  background-color: #f1f5f9 !important; /* slate-100 hover */
 }
 
-/* Form Inputs, Selects & Textareas */
+/* High-Contrast Table Text (IPs, Hostnames) */
+html.light-mode .text-slate-100,
+html.light-mode .text-slate-200,
+html.light-mode .text-white {
+  color: #1f2937 !important; /* dark gray #1F2937 for primary text */
+}
+
+html.light-mode .text-slate-300 {
+  color: #374151 !important;
+}
+
+/* "Unassigned Range" & Muted Text: Increased Contrast (#4B5563 / text-gray-600) */
+html.light-mode .text-slate-400,
+html.light-mode .text-slate-500,
+html.light-mode .text-slate-600 {
+  color: #4b5563 !important; /* Gray-600 for full legibility */
+}
+
+html.light-mode tr.bg-slate-950\/30,
+html.light-mode .bg-slate-950\/30,
+html.light-mode .bg-slate-950\/40 {
+  background-color: #f8fafc !important;
+  color: #4b5563 !important;
+}
+
+/* 6. Accessible High-Contrast Type Badges */
+/* Physical Hardware */
+html.light-mode .bg-blue-500\/10 {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+  border-color: #bfdbfe !important;
+}
+
+/* Macvlan Container */
+html.light-mode .bg-purple-500\/10 {
+  background-color: #f3e8ff !important;
+  color: #6b21a8 !important;
+  border-color: #e9d5ff !important;
+}
+
+/* Shared/Host Container */
+html.light-mode .bg-emerald-500\/10 {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
+}
+
+/* Gateway / Router */
+html.light-mode .bg-amber-500\/10 {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
+}
+
+/* Infrastructure */
+html.light-mode .bg-indigo-500\/10 {
+  background-color: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #c7d2fe !important;
+}
+
+/* Unassigned Badge */
+html.light-mode .bg-slate-950.text-slate-500 {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* 7. Port Summary Badges (:443, :80, :8006, etc.) - Neutral Light Pills */
+html.light-mode .bg-cyan-950\/90,
+html.light-mode .bg-cyan-950,
+html.light-mode .bg-slate-800\/90 {
+  background-color: #f3f4f6 !important; /* Neutral Light Gray-100 */
+  color: #374151 !important; /* Dark Slate Gray-700 */
+  border-color: #e5e7eb !important;
+}
+
+html.light-mode .text-cyan-300,
+html.light-mode .text-cyan-400 {
+  color: #374151 !important;
+}
+
+html.light-mode a.bg-cyan-950\/90:hover,
+html.light-mode a.bg-slate-800\/90:hover {
+  background-color: #e5e7eb !important;
+  color: #111827 !important;
+  border-color: #d1d5db !important;
+}
+
+/* 8. Buttons, Control Containers & Inputs */
 html.light-mode select,
 html.light-mode input[type="text"],
 html.light-mode input[type="number"],
@@ -85,95 +181,43 @@ html.light-mode textarea {
   box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
 }
 
+html.light-mode input::placeholder,
+html.light-mode textarea::placeholder {
+  color: #64748b !important;
+}
+
 html.light-mode select option {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
-/* Text Color Adjustments for High Readability */
-html.light-mode .text-slate-100,
-html.light-mode .text-slate-200,
-html.light-mode .text-white {
-  color: #0f172a !important; /* slate-900 */
+html.light-mode .bg-slate-800,
+html.light-mode .bg-slate-800\/80,
+html.light-mode .bg-slate-800\/50 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
 }
 
-html.light-mode .text-slate-300 {
-  color: #1e293b !important; /* slate-800 */
+html.light-mode .hover\:bg-slate-800:hover,
+html.light-mode .hover\:bg-slate-800\/80:hover {
+  background-color: #e2e8f0 !important;
 }
 
-html.light-mode .text-slate-400 {
-  color: #475569 !important; /* slate-600 */
+html.light-mode .hover\:bg-slate-700:hover {
+  background-color: #cbd5e1 !important;
 }
 
-html.light-mode .text-slate-500 {
-  color: #64748b !important; /* slate-500 */
-}
-
-/* Status & Metric High-Contrast Text Colors */
-html.light-mode .text-emerald-400 {
-  color: #059669 !important; /* emerald-600 */
-}
-
-html.light-mode .text-amber-400 {
-  color: #d97706 !important; /* amber-600 */
-}
-
-html.light-mode .text-blue-400 {
-  color: #2563eb !important; /* blue-600 */
-}
-
-html.light-mode .text-purple-400 {
-  color: #9333ea !important; /* purple-600 */
-}
-
-html.light-mode .text-cyan-400 {
-  color: #0891b2 !important; /* cyan-600 */
-}
-
-html.light-mode .text-indigo-400 {
-  color: #4f46e5 !important; /* indigo-600 */
-}
-
-/* Badge Styles in Light Mode */
-html.light-mode .bg-emerald-500\/10,
-html.light-mode .bg-emerald-950\/40 {
-  background-color: #d1fae5 !important; /* emerald-100 */
-  color: #047857 !important; /* emerald-700 */
-  border-color: #a7f3d0 !important;
-}
-
-html.light-mode .bg-amber-500\/10 {
-  background-color: #fef3c7 !important; /* amber-100 */
-  color: #b45309 !important; /* amber-700 */
-  border-color: #fde68a !important;
-}
-
-html.light-mode .bg-blue-500\/10 {
-  background-color: #dbeafe !important; /* blue-100 */
-  color: #1d4ed8 !important; /* blue-700 */
-  border-color: #bfdbfe !important;
-}
-
-html.light-mode .bg-purple-500\/10 {
-  background-color: #f3e8ff !important; /* purple-100 */
-  color: #7e22ce !important; /* purple-700 */
-  border-color: #e9d5ff !important;
-}
-
-html.light-mode .bg-indigo-500\/10 {
-  background-color: #e0e7ff !important; /* indigo-100 */
-  color: #3730a3 !important; /* indigo-700 */
-  border-color: #c7d2fe !important;
-}
-
-html.light-mode .bg-cyan-500\/10 {
-  background-color: #cffafe !important; /* cyan-100 */
-  color: #0e7490 !important; /* cyan-700 */
-  border-color: #a5f3fc !important;
-}
-
-/* Modals & Overlays */
+/* 9. Modals & Overlays */
 html.light-mode .fixed.inset-0.bg-black\/70,
 html.light-mode .fixed.inset-0.bg-slate-950\/80 {
   background-color: rgba(15, 23, 42, 0.4) !important;
+}
+
+html.light-mode #settingsDropdownMenu,
+html.light-mode #editModal > div > div {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.05) !important;
 }

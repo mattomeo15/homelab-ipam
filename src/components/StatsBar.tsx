@@ -57,7 +57,7 @@ export const StatsBar: React.FC<StatsBarProps> = ({ stats, records }) => {
           <span className="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">
             Hardware
           </span>
-          <span className="text-sm sm:text-base font-bold text-blue-400">
+          <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-blue-400">
             {hardwareCount}
           </span>
         </div>
@@ -67,7 +67,7 @@ export const StatsBar: React.FC<StatsBarProps> = ({ stats, records }) => {
           <span className="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">
             Container
           </span>
-          <span className="text-sm sm:text-base font-bold text-purple-400">
+          <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-purple-400">
             {containerCount}
           </span>
         </div>
@@ -77,7 +77,7 @@ export const StatsBar: React.FC<StatsBarProps> = ({ stats, records }) => {
           <span className="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider truncate">
             % Used
           </span>
-          <span className="text-sm sm:text-base font-bold text-cyan-400">
+          <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-cyan-400">
             {utilization}
           </span>
         </div>
