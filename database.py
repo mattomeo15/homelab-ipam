@@ -32,6 +32,9 @@ from sqlalchemy.orm import (
     selectinload,
 )
 
+from display_name_engine import resolve_device_display_name
+
+
 # Default Database Path & Connection String
 DB_PATH = os.getenv("DATABASE_PATH", "/data/ip_freely.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{DB_PATH}")
@@ -84,14 +87,15 @@ class Device(Base):
     @hybrid_property
     def display_name(self) -> str:
         """
-        Computed display name with fallback order:
-        custom_alias -> primary_hostname -> fallback generic string (IP-based name).
+        Calculates display_name using smart Display Name Inheritance Engine:
+        custom_alias -> scraped HTTP title -> service name -> cleaned mDNS/hostname -> PTR -> Fallback.
         """
-        if self.custom_alias and self.custom_alias.strip():
-            return self.custom_alias.strip()
-        if self.primary_hostname and self.primary_hostname.strip():
-            return self.primary_hostname.strip()
-        return f"Host {self.ip_address}"
+        return resolve_device_display_name(
+            custom_alias=self.custom_alias,
+            services=self.services,
+            primary_hostname=self.primary_hostname,
+            ip_address=self.ip_address,
+        )
 
 
 class Service(Base):

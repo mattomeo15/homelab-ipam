@@ -12,6 +12,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import httpx
+from display_name_engine import resolve_device_display_name
 
 
 # -----------------------------------------------------------------------------
@@ -275,26 +276,21 @@ async def check_port_and_scrape_http(
 
 def resolve_host_identity(host: DiscoveredHost) -> str:
     """
-    Determines display_name based on strict priority hierarchy:
-    1. Discovered mDNS / Bonjour Hostname
-    2. Scraped HTTP Page Title
-    3. NetBIOS Hostname
-    4. Reverse DNS (PTR) Hostname
-    5. Fallback: "Unidentified Host ({ip})"
+    Determines display_name based on strict priority hierarchy via Display Name Inheritance Engine:
+    1. Custom Alias (if set)
+    2. Best valid Scraped HTTP Page Title from discovered services
+    3. Discovered Service Name
+    4. Cleaned mDNS / Zeroconf Hostname
+    5. Cleaned Reverse DNS (PTR) / NetBIOS Hostname
+    6. Fallback: "Unidentified Host ({ip})"
     """
-    if host.mdns_hostname and host.mdns_hostname.strip():
-        return host.mdns_hostname.strip()
-
-    if host.http_title and host.http_title.strip():
-        return host.http_title.strip()
-
-    if host.netbios_hostname and host.netbios_hostname.strip():
-        return host.netbios_hostname.strip()
-
-    if host.ptr_hostname and host.ptr_hostname.strip():
-        return host.ptr_hostname.strip()
-
-    return f"Unidentified Host ({host.ip})"
+    return resolve_device_display_name(
+        services=host.services,
+        mdns_hostname=host.mdns_hostname,
+        netbios_hostname=host.netbios_hostname,
+        ptr_hostname=host.ptr_hostname,
+        ip_address=host.ip,
+    )
 
 
 # -----------------------------------------------------------------------------

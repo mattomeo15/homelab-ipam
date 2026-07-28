@@ -11,6 +11,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import httpx
+from display_name_engine import resolve_device_display_name
 
 
 # -----------------------------------------------------------------------------
@@ -303,16 +304,14 @@ async def probe_port_web(ip: str, port: int, service_hint: str, timeout: float =
 
 
 def resolve_display_name(host: DiscoveredHost) -> str:
-    """Assigns priority host display name."""
-    if host.mdns_hostname and host.mdns_hostname.strip():
-        return host.mdns_hostname.strip()
-    if host.http_title and host.http_title.strip():
-        return host.http_title.strip()
-    if host.netbios_hostname and host.netbios_hostname.strip():
-        return host.netbios_hostname.strip()
-    if host.ptr_hostname and host.ptr_hostname.strip():
-        return host.ptr_hostname.strip()
-    return f"Unidentified Host ({host.ip})"
+    """Assigns priority host display name via Display Name Inheritance Engine."""
+    return resolve_device_display_name(
+        services=host.services,
+        mdns_hostname=host.mdns_hostname,
+        netbios_hostname=host.netbios_hostname,
+        ptr_hostname=host.ptr_hostname,
+        ip_address=host.ip,
+    )
 
 
 # -----------------------------------------------------------------------------
