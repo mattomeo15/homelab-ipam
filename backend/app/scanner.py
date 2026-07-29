@@ -6,6 +6,14 @@ import struct
 import aiohttp
 from typing import List, Dict, Any, Optional
 
+try:
+    from backend.app.display_name_engine import resolve_device_display_name
+except ImportError:
+    try:
+        from .display_name_engine import resolve_device_display_name
+    except ImportError:
+        from display_name_engine import resolve_device_display_name
+
 def get_active_subnet(db_ips: Optional[List[str]] = None) -> str:
     # 1. Environment Variable Override
     env_subnet = os.environ.get("TARGET_SUBNET")
@@ -171,7 +179,6 @@ def get_arp_mac(ip: str) -> str:
         pass
     return ""
 
-# --- TIER 1: mDNS / Zeroconf (Port 5353) ---
 def _make_mdns_ptr_query(ip: str) -> bytes:
     parts = ip.split('.')[::-1]
     rev_ip = ".".join(parts) + ".in-addr.arpa"
@@ -181,7 +188,7 @@ def _make_mdns_ptr_query(ip: str) -> bytes:
         packet.append(len(lbl))
         packet.extend(lbl)
     packet.append(0)
-    packet.extend(b"\x00\x0c\x00\x01")  # PTR, IN
+    packet.extend(b"\x00\x0c\x00\x01")
     return bytes(packet)
 
 def _parse_mdns_response(data: bytes) -> Optional[str]:
@@ -205,7 +212,7 @@ def _parse_mdns_response(data: bytes) -> Optional[str]:
                     break
                 else:
                     offset += 1 + length
-            offset += 4  # QTYPE & QCLASS
+            offset += 4
             
         for _ in range(ancount):
             if offset >= len(data):
@@ -226,7 +233,7 @@ def _parse_mdns_response(data: bytes) -> Optional[str]:
             rdlength = int.from_bytes(data[offset+8:offset+10], 'big')
             offset += 10
             
-            if rtype == 12:  # PTR
+            if rtype == 12:
                 curr = offset
                 rdata_end = offset + rdlength
                 labels = []
@@ -256,7 +263,6 @@ def _parse_mdns_response(data: bytes) -> Optional[str]:
 async def query_mdns_hostname(ip: str, timeout: float = 0.5) -> Optional[str]:
     loop = asyncio.get_event_loop()
     
-    # 1. Direct UDP socket query to mDNS port 5353
     def _udp_mdns():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(timeout)
@@ -277,7 +283,6 @@ async def query_mdns_hostname(ip: str, timeout: float = 0.5) -> Optional[str]:
     except Exception:
         pass
 
-    # 2. Python zeroconf library integration if available
     try:
         import zeroconf
         zc = zeroconf.Zeroconf()
@@ -292,7 +297,6 @@ async def query_mdns_hostname(ip: str, timeout: float = 0.5) -> Optional[str]:
 
     return None
 
-# --- TIER 2: NetBIOS Name Query (UDP Port 137) ---
 def _build_netbios_query() -> bytes:
     header = b"\x80\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00"
     qname = b"\x20CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\x00"
@@ -313,7 +317,6 @@ def _parse_netbios_response(data: bytes) -> Optional[str]:
             flags = int.from_bytes(data[offset+16:offset+18], 'big')
             offset += 18
             
-            # Type 0x00 = Workstation/Server Name
             if name_type == 0x00 and not (flags & 0x8000):
                 name = name_bytes.decode('latin-1', errors='ignore').strip()
                 if name and not name.startswith('IS~') and name != 'WORKGROUP':
@@ -342,7 +345,6 @@ async def query_netbios_hostname(ip: str, timeout: float = 0.5) -> Optional[str]
     except Exception:
         return None
 
-# --- TIER 3: UPnP / SSDP XML Discovery & HTTP Title ---
 async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout: float = 0.8) -> Optional[str]:
     upnp_urls = [
         f"http://{ip}:1900/description.xml",
@@ -365,7 +367,6 @@ async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout:
         except Exception:
             pass
 
-    # SSDP Unicast M-SEARCH UDP check
     loop = asyncio.get_event_loop()
     def _ssdp_udp():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -398,7 +399,6 @@ async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout:
     except Exception:
         return None
 
-# --- TIER 4: MAC OUI Vendor Lookup ---
 def lookup_mac_oui(mac: str) -> Optional[str]:
     if not mac:
         return None
@@ -408,7 +408,6 @@ def lookup_mac_oui(mac: str) -> Optional[str]:
         if prefix in OUI_VENDOR_MAP:
             return f"{OUI_VENDOR_MAP[prefix]}-{prefix.replace(':', '')[-4:]}"
 
-    # Try netaddr if available
     try:
         import netaddr
         eui = netaddr.EUI(mac)
@@ -458,11 +457,9 @@ def sanitize_hostname(hostname: str, is_guess: bool = False) -> Optional[str]:
     if not hostname:
         return None
 
-    # 2. CONTAINER ID DETECTION
     if is_container_id(hostname):
-        return None  # Discard 12-char hex container IDs
+        return None
 
-    # 3. SUFFIX STRIPPING
     clean = strip_hostname_suffixes(hostname)
     if not clean:
         return None
@@ -470,14 +467,12 @@ def sanitize_hostname(hostname: str, is_guess: bool = False) -> Optional[str]:
     if is_container_id(clean):
         return None
 
-    # 4. CONFIDENCE FLAG (?)
     if is_guess and not clean.endswith('?'):
         clean = f"{clean}?"
 
     return clean
 
 def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> tuple[Optional[str], bool]:
-    # Returns (hostname, is_guess)
     valid_title = None
     if title and not is_blacklisted_title(title):
         valid_title = title.strip()
@@ -528,7 +523,6 @@ def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> t
         if 2 <= len(clean) <= 30:
             return (clean, False)
 
-    # Port Signature Guesses
     if 8123 in open_ports:
         return ("Home Assistant", True)
     if 8006 in open_ports:
@@ -552,7 +546,6 @@ def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> t
 
     return (None, False)
 
-# --- DISCOVERY WATERFALL RESOLVER ---
 async def resolve_hostname_waterfall(
     ip: str,
     mac_addr: str,
@@ -560,7 +553,6 @@ async def resolve_hostname_waterfall(
     first_title: Optional[str],
     session: aiohttp.ClientSession
 ) -> str:
-    # Tier 1: mDNS / Zeroconf (Port 5353)
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
@@ -570,7 +562,6 @@ async def resolve_hostname_waterfall(
     except Exception:
         pass
 
-    # Tier 2: NetBIOS Name Query (UDP Port 137)
     try:
         nb_name = await query_netbios_hostname(ip, timeout=0.5)
         if nb_name:
@@ -580,7 +571,6 @@ async def resolve_hostname_waterfall(
     except Exception:
         pass
 
-    # Tier 3: UPnP / SSDP XML Discovery
     try:
         upnp_name = await query_upnp_ssdp_name(session, ip, timeout=0.6)
         if upnp_name:
@@ -590,14 +580,12 @@ async def resolve_hostname_waterfall(
     except Exception:
         pass
 
-    # Tier 4: Scraped Web Title / Port Signature Guess
     derived_name, is_guess = derive_hostname_from_title(first_title, open_ports)
     if derived_name:
         clean = sanitize_hostname(derived_name, is_guess=is_guess)
         if clean and len(clean) >= 2:
             return clean
 
-    # Tier 5: System DNS Reverse Lookup
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
         if hostname and not hostname.startswith("192.") and not hostname.startswith("host-"):
@@ -608,39 +596,32 @@ async def resolve_hostname_waterfall(
     except Exception:
         pass
 
-    # Tier 6: MAC OUI Vendor Lookup (Fallback guess)
     mac_vendor = lookup_mac_oui(mac_addr)
     if mac_vendor:
         clean = sanitize_hostname(mac_vendor, is_guess=True)
         if clean and len(clean) >= 2:
             return clean
 
-    # Tier 7: Final Fallback
     return f"host-{ip.split('.')[-1]}"
 
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     ports = [s["port"] for s in open_services]
     titles_concat = " ".join([s.get("name", "") for s in open_services]).lower()
     
-    # 1. Gateway / Router
     if ip.endswith(".1") or ip.endswith(".254") or any(k in titles_concat for k in ["opnsense", "pfsense", "router", "gateway", "unifi security", "udm", "openwrt"]):
         return "Gateway / Router"
         
-    # 2. Infrastructure
     if 8006 in ports or 9090 in ports or any(k in titles_concat for k in ["proxmox", "pve", "idrac", "ilo", "esxi", "vsphere", "unifi switch", "cockpit"]):
         return "Infrastructure"
         
-    # 3. Shared/Host Container
     if 9000 in ports or 81 in ports or 8080 in ports or len(open_services) >= 3:
         return "Shared/Host Container"
         
-    # 4. Macvlan Container
     macvlan_ports = {8123, 7878, 8989, 9696, 8096, 32400, 3001, 8081, 9091, 5800}
     if any(p in macvlan_ports for p in ports) or "pi-hole" in titles_concat or "home assistant" in titles_concat:
         if len(open_services) > 0 and not (22 in ports and 445 in ports):
             return "Macvlan Container"
 
-    # 5. Physical Hardware fallback
     return "Physical Hardware"
 
 async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) -> Optional[str]:
@@ -687,7 +668,6 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             if is_open:
                 active_ports.append(port)
                 
-        # For active web ports, attempt title scraping
         first_title = None
         priority_web_ports = [p for p in [8123, 8006, 5001, 8080, 443, 80, 3001, 3000] if p in active_ports]
         other_web_ports = [p for p in active_ports if p in WEB_PORTS and p not in priority_web_ports]
@@ -721,7 +701,6 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
 
         is_active = len(open_services) > 0 or is_pingable or bool(mac_addr)
 
-        # Run Discovery Waterfall for hostname
         if is_active:
             hostname = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
         else:
