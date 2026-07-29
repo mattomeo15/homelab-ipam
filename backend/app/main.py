@@ -39,60 +39,46 @@ except ImportError:
     from scanner import scan_subnet, get_active_subnet
     from exporter import generate_markdown_export, generate_text_export
 
+# Ensure data directory exists before database init
+db_dir = os.path.dirname(DB_PATH) if 'DB_PATH' in globals() else os.path.join(APP_DIR, "..", "data")
+if db_dir and not os.path.exists(db_dir):
+    os.makedirs(db_dir, exist_ok=True)
+
 # Initialize Database at startup
 init_db()
 
-# Resolve workspace root, templates, and public asset paths with Docker fallbacks
-PROJECT_ROOT = os.path.dirname(os.path.dirname(APP_DIR))
+# Safe path resolution for both Local Dev and Docker containers
+ROOT_DIR = os.path.dirname(os.path.dirname(APP_DIR))
 
-candidate_templates = [
-    os.path.join(PROJECT_ROOT, "frontend", "templates"),
+# Search candidate locations for templates and public assets
+possible_template_dirs = [
+    os.path.join(ROOT_DIR, "frontend", "templates"),
+    os.path.join(APP_DIR, "..", "..", "frontend", "templates"),
+    os.path.join(APP_DIR, "frontend", "templates"),
     os.path.join(APP_DIR, "templates"),
-    os.path.join(APP_DIR, "..", "templates"),
-    os.path.join(os.getcwd(), "templates"),
-    os.path.join(os.getcwd(), "frontend", "templates"),
+    "/app/frontend/templates",
+    "/app/templates"
 ]
 
-TEMPLATES_DIR = candidate_templates[0]
-for path in candidate_templates:
-    if os.path.exists(path):
-        TEMPLATES_DIR = path
-        break
-
-candidate_public = [
-    os.path.join(PROJECT_ROOT, "frontend", "public"),
+possible_public_dirs = [
+    os.path.join(ROOT_DIR, "frontend", "public"),
+    os.path.join(APP_DIR, "..", "..", "frontend", "public"),
+    os.path.join(APP_DIR, "frontend", "public"),
     os.path.join(APP_DIR, "public"),
-    os.path.join(APP_DIR, "..", "public"),
-    os.path.join(os.getcwd(), "public"),
-    os.path.join(os.getcwd(), "frontend", "public"),
+    "/app/frontend/public",
+    "/app/public"
 ]
 
-PUBLIC_DIR = candidate_public[0]
-for path in candidate_public:
-    if os.path.exists(path):
-        PUBLIC_DIR = path
-        break
+TEMPLATES_DIR = next((d for d in possible_template_dirs if os.path.exists(d)), possible_template_dirs[0])
+PUBLIC_DIR = next((d for d in possible_public_dirs if os.path.exists(d)), possible_public_dirs[0])
 
-ROOT_DIR = PROJECT_ROOT
+# Print paths on startup for easy debugging via 'docker logs'
+print(f"[IPAM Startup] Using TEMPLATES_DIR: {TEMPLATES_DIR} (Exists: {os.path.exists(TEMPLATES_DIR)})")
+print(f"[IPAM Startup] Using PUBLIC_DIR: {PUBLIC_DIR} (Exists: {os.path.exists(PUBLIC_DIR)})")
 
 app = FastAPI(title="IP-Freely", version="1.0.0")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
-
-# Wrap TemplateResponse to seamlessly handle request=request, name="..." across Starlette versions
-_orig_template_response = templates.TemplateResponse
-def _patched_template_response(*args, **kwargs):
-    if "request" in kwargs and "context" not in kwargs and "name" in kwargs:
-        req_val = kwargs.pop("request")
-        kwargs["context"] = {"request": req_val}
-    elif len(args) > 0 and isinstance(args[0], Request):
-        req_val = args[0]
-        args = args[1:]
-        if "context" not in kwargs:
-            kwargs["context"] = {"request": req_val}
-    return _orig_template_response(*args, **kwargs)
-
-templates.TemplateResponse = _patched_template_response
 
 if os.path.exists(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
@@ -162,7 +148,7 @@ async def websocket_endpoint(websocket: WebSocket, path: str = ""):
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/api/ips")
@@ -257,17 +243,17 @@ async def perform_background_scan():
                     row_host = (row["hostname"] or "").strip()
                     item_host = (item.get("hostname", "") or "").strip()
 
-                    # Prioritize fresh valid scan hostname over stale DB record
+                    # Prioritize newly scanned real hostname over existing DB hostname
                     if item_host and not item_host.startswith("host-"):
                         final_hostname = item_host
-                    elif row_host and not row_host.startswith("host-"):
+                    elif row_host:
                         final_hostname = row_host
                     else:
-                        final_hostname = item_host or row_host or f"host-{ip.split('.')[-1]}"
+                        final_hostname = item_host or f"host-{ip.split('.')[-1]}"
 
                     row_mac = (row["mac_address"] or "").strip()
                     item_mac = (item.get("mac_address", "") or "").strip()
-                    final_mac = row_mac if row_mac else item_mac
+                    final_mac = item_mac if item_mac else row_mac
 
                     row_type = row["type_tag"] or "Unassigned"
                     item_type = item.get("type_tag", "Physical Hardware")

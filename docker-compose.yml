@@ -5,17 +5,15 @@ services:
     build: .
     container_name: homelab-ipam
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Use host network so ping/ARP scanning can discover LAN devices
+    network_mode: host
     environment:
       - TZ=America/New_York
-      - PUID=0
-      - PGID=0
       - PORT=8000
     volumes:
-      - ./data:/data
+      - ./backend/data:/app/backend/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
       interval: 30s
       timeout: 10s
       retries: 3
