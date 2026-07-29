@@ -148,7 +148,10 @@ async def websocket_endpoint(websocket: WebSocket, path: str = ""):
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request, 
+        name="index.html"
+    )
 
 
 @app.get("/api/ips")
@@ -213,15 +216,18 @@ async def perform_background_scan():
     if scan_progress["isScanning"]:
         return
 
+    stats = await get_stats()
+    subnet_prefix = stats.get("subnet", "192.168.2")
+
     scan_progress["scannedCount"] = 0
     scan_progress["total"] = 254
-    scan_progress["currentIp"] = "192.168.2.1"
+    scan_progress["currentIp"] = f"{subnet_prefix}.1"
     scan_progress["isScanning"] = True
     scan_progress["discoveredServices"] = 0
-    scan_progress["log"] = ["[Scanner] Initializing parallel subnet scan for 192.168.2.1 - 192.168.2.254..."]
+    scan_progress["log"] = [f"[Scanner] Initializing parallel subnet scan for {subnet_prefix}.1 - {subnet_prefix}.254..."]
 
     try:
-        discovered = await scan_subnet("192.168.2", 1, 254, progress_dict=scan_progress)
+        discovered = await scan_subnet(subnet_prefix, 1, 254, progress_dict=scan_progress)
         conn = get_db_connection()
         for item in discovered:
             if item["status"] == "Active":
@@ -310,7 +316,7 @@ async def export_md():
     return Response(
         content=content,
         media_type="text/markdown",
-        headers={"Content-Disposition": "attachment; filename=homelab-ipam-192.168.2.0.md"}
+        headers={"Content-Disposition": "attachment; filename=homelab-ipam-export.md"}
     )
 
 
@@ -322,7 +328,7 @@ async def export_txt():
     return Response(
         content=content,
         media_type="text/plain",
-        headers={"Content-Disposition": "attachment; filename=homelab-ipam-192.168.2.0.txt"}
+        headers={"Content-Disposition": "attachment; filename=homelab-ipam-export.txt"}
     )
 
 
