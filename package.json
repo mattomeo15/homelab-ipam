@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 3000 --reload",
+    "dev": "python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 3000",
     "build": "python3 -m py_compile backend/app/main.py backend/app/database.py backend/app/display_name_engine.py backend/app/scanner.py backend/app/exporter.py",
     "start": "python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 3000",
     "lint": "python3 -m py_compile backend/app/main.py backend/app/database.py backend/app/display_name_engine.py backend/app/scanner.py backend/app/exporter.py"

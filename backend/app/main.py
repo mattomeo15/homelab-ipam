@@ -3,7 +3,7 @@ import sys
 import json
 import asyncio
 from typing import List, Optional
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -103,6 +103,17 @@ class IPUpdateModel(BaseModel):
     macAddress: Optional[str] = None
     notes: Optional[str] = ""
     services: List[ServiceModel] = []
+
+
+@app.websocket("/ws")
+@app.websocket("/{path:path}")
+async def websocket_endpoint(websocket: WebSocket, path: str = ""):
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.receive_text()
+    except (WebSocketDisconnect, Exception):
+        pass
 
 
 @app.get("/", response_class=HTMLResponse)
