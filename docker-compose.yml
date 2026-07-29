@@ -5,16 +5,17 @@ services:
     build: .
     container_name: homelab-ipam
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8000:8000"
     environment:
       - TZ=America/New_York
       - PUID=0
       - PGID=0
-      - PORT=8080
+      - PORT=8000
     volumes:
       - ./data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
       timeout: 10s
       retries: 3

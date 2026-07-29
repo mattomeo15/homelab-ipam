@@ -30,9 +30,9 @@ COPY frontend/templates /app/frontend/templates
 
 VOLUME ["/app/backend/data"]
 
-EXPOSE 3000
+EXPOSE 8000
 
-ENV PORT=3000
+ENV PORT=8000
 
 # Run uvicorn starting from the backend.app.main module
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-3000}"]
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

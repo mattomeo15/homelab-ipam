@@ -28,26 +28,71 @@ def get_db_connection():
 def init_db():
     """
     Initializes the SQLite database schema and populates initial subnet records if empty.
+    Recovers automatically if database file is corrupted or malformed.
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ips (
-            ip TEXT PRIMARY KEY,
-            hostname TEXT,
-            status TEXT,
-            type_tag TEXT,
-            mac_address TEXT,
-            notes TEXT,
-            services TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ips (
+                ip TEXT PRIMARY KEY,
+                hostname TEXT,
+                status TEXT,
+                type_tag TEXT,
+                mac_address TEXT,
+                notes TEXT,
+                services TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
 
-    cursor.execute("SELECT COUNT(*) FROM ips")
-    count = cursor.fetchone()[0]
-    if count == 0:
+        cursor.execute("SELECT COUNT(*) FROM ips")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            for i in range(1, 255):
+                ip = f"192.168.2.{i}"
+                cursor.execute(
+                    "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
+                )
+            conn.commit()
+        else:
+            # Clean up legacy mock placeholder hostnames if present
+            mock_hosts = (
+                'gateway.homelab.local', 'pihole-01.homelab.local', 'pihole-dns.homelab.local',
+                'pve-node1.homelab.local', 'docker-host-01', 'pve-host01.homelab.local',
+                'truenas-storage.homelab.local', 'synology-ds920plus', 'idrac-pve-server', 'homeassistant-macvlan'
+            )
+            placeholders = ','.join('?' * len(mock_hosts))
+            cursor.execute(
+                f"UPDATE ips SET hostname='', status='Free', type_tag='Unassigned', mac_address='', notes='', services='[]' WHERE hostname IN ({placeholders})",
+                mock_hosts
+            )
+            conn.commit()
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        print(f"Database error encountered: {e}. Resetting database...")
+        if os.path.exists(DB_PATH):
+            try:
+                os.remove(DB_PATH)
+            except Exception:
+                pass
+        # Retry once after removing corrupted DB
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ips (
+                ip TEXT PRIMARY KEY,
+                hostname TEXT,
+                status TEXT,
+                type_tag TEXT,
+                mac_address TEXT,
+                notes TEXT,
+                services TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         for i in range(1, 255):
             ip = f"192.168.2.{i}"
             cursor.execute(
@@ -55,20 +100,7 @@ def init_db():
                 (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
             )
         conn.commit()
-    else:
-        # Clean up legacy mock placeholder hostnames if present
-        mock_hosts = (
-            'gateway.homelab.local', 'pihole-01.homelab.local', 'pihole-dns.homelab.local',
-            'pve-node1.homelab.local', 'docker-host-01', 'pve-host01.homelab.local',
-            'truenas-storage.homelab.local', 'synology-ds920plus', 'idrac-pve-server', 'homeassistant-macvlan'
-        )
-        placeholders = ','.join('?' * len(mock_hosts))
-        cursor.execute(
-            f"UPDATE ips SET hostname='', status='Free', type_tag='Unassigned', mac_address='', notes='', services='[]' WHERE hostname IN ({placeholders})",
-            mock_hosts
-        )
-        conn.commit()
-    conn.close()
+        conn.close()
 
 
 def clear_all_data_db():
