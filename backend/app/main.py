@@ -42,14 +42,57 @@ except ImportError:
 # Initialize Database at startup
 init_db()
 
-# Resolve workspace root, templates, and public asset paths
-ROOT_DIR = os.path.dirname(os.path.dirname(APP_DIR))
-TEMPLATES_DIR = os.path.join(ROOT_DIR, "frontend", "templates")
-PUBLIC_DIR = os.path.join(ROOT_DIR, "frontend", "public")
+# Resolve workspace root, templates, and public asset paths with Docker fallbacks
+PROJECT_ROOT = os.path.dirname(os.path.dirname(APP_DIR))
+
+candidate_templates = [
+    os.path.join(PROJECT_ROOT, "frontend", "templates"),
+    os.path.join(APP_DIR, "templates"),
+    os.path.join(APP_DIR, "..", "templates"),
+    os.path.join(os.getcwd(), "templates"),
+    os.path.join(os.getcwd(), "frontend", "templates"),
+]
+
+TEMPLATES_DIR = candidate_templates[0]
+for path in candidate_templates:
+    if os.path.exists(path):
+        TEMPLATES_DIR = path
+        break
+
+candidate_public = [
+    os.path.join(PROJECT_ROOT, "frontend", "public"),
+    os.path.join(APP_DIR, "public"),
+    os.path.join(APP_DIR, "..", "public"),
+    os.path.join(os.getcwd(), "public"),
+    os.path.join(os.getcwd(), "frontend", "public"),
+]
+
+PUBLIC_DIR = candidate_public[0]
+for path in candidate_public:
+    if os.path.exists(path):
+        PUBLIC_DIR = path
+        break
+
+ROOT_DIR = PROJECT_ROOT
 
 app = FastAPI(title="IP-Freely", version="1.0.0")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+# Wrap TemplateResponse to seamlessly handle request=request, name="..." across Starlette versions
+_orig_template_response = templates.TemplateResponse
+def _patched_template_response(*args, **kwargs):
+    if "request" in kwargs and "context" not in kwargs and "name" in kwargs:
+        req_val = kwargs.pop("request")
+        kwargs["context"] = {"request": req_val}
+    elif len(args) > 0 and isinstance(args[0], Request):
+        req_val = args[0]
+        args = args[1:]
+        if "context" not in kwargs:
+            kwargs["context"] = {"request": req_val}
+    return _orig_template_response(*args, **kwargs)
+
+templates.TemplateResponse = _patched_template_response
 
 if os.path.exists(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
@@ -119,7 +162,7 @@ async def websocket_endpoint(websocket: WebSocket, path: str = ""):
 @app.get("/", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 @app.get("/api/ips")
@@ -214,12 +257,13 @@ async def perform_background_scan():
                     row_host = (row["hostname"] or "").strip()
                     item_host = (item.get("hostname", "") or "").strip()
 
-                    if row_host and not row_host.startswith("host-"):
-                        final_hostname = row_host
-                    elif item_host and not item_host.startswith("host-"):
+                    # Prioritize fresh valid scan hostname over stale DB record
+                    if item_host and not item_host.startswith("host-"):
                         final_hostname = item_host
+                    elif row_host and not row_host.startswith("host-"):
+                        final_hostname = row_host
                     else:
-                        final_hostname = row_host or item_host or f"host-{ip.split('.')[-1]}"
+                        final_hostname = item_host or row_host or f"host-{ip.split('.')[-1]}"
 
                     row_mac = (row["mac_address"] or "").strip()
                     item_mac = (item.get("mac_address", "") or "").strip()
