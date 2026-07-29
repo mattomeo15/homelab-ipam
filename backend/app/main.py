@@ -26,6 +26,7 @@ try:
     from backend.app.display_name_engine import resolve_device_display_name
     from backend.app.scanner import scan_subnet, get_active_subnet
     from backend.app.exporter import generate_markdown_export, generate_text_export
+    from backend.app.naming_guide import NAMING_GUIDE
 except ImportError:
     from database import (
         init_db,
@@ -38,6 +39,7 @@ except ImportError:
     from display_name_engine import resolve_device_display_name
     from scanner import scan_subnet, get_active_subnet
     from exporter import generate_markdown_export, generate_text_export
+    from naming_guide import NAMING_GUIDE
 
 # Ensure data directory exists before database init
 db_dir = os.path.dirname(DB_PATH) if 'DB_PATH' in globals() else os.path.join(APP_DIR, "..", "data")
@@ -178,6 +180,16 @@ class IPUpdateModel(BaseModel):
     macAddress: Optional[str] = None
     notes: Optional[str] = ""
     services: List[ServiceModel] = []
+    latency_ms: Optional[float] = 0.0
+    latencyMs: Optional[float] = None
+    os_family: Optional[str] = "Unknown"
+    osFamily: Optional[str] = None
+    device_model: Optional[str] = ""
+    deviceModel: Optional[str] = None
+    first_discovered: Optional[str] = ""
+    firstDiscovered: Optional[str] = None
+    last_seen: Optional[str] = ""
+    lastSeen: Optional[str] = None
 
 
 @app.websocket("/ws")
@@ -247,6 +259,11 @@ async def get_subnet():
     return {"subnet": stats["subnet"]}
 
 
+@app.get("/api/naming-guide")
+async def get_naming_guide():
+    return NAMING_GUIDE
+
+
 @app.put("/api/ips/{ip}")
 async def update_ip(ip: str, data: IPUpdateModel):
     tag = data.typeTag if data.typeTag is not None else (data.type_tag or "Physical Hardware")
@@ -266,14 +283,24 @@ async def update_ip(ip: str, data: IPUpdateModel):
     else:
         final_hostname = data.hostname
         user_src = data.hostnameSource if data.hostnameSource is not None else (data.hostname_source or "")
-        if user_src and user_src != "Custom":
-            final_source = user_src
-        elif row_dict.get("hostname") != data.hostname:
+        if user_src == "Custom":
+            final_source = "Custom"
+        elif row_dict.get("hostname") and row_dict.get("hostname") != data.hostname:
             final_source = "Custom"
         else:
             final_source = user_src or row_dict.get("hostname_source", "Fallback") or "Fallback"
+
+    lat = data.latencyMs if data.latencyMs is not None else (data.latency_ms if data.latency_ms is not None else row_dict.get("latency_ms", 0.0))
+    os_fam = data.osFamily if data.osFamily is not None else (data.os_family or row_dict.get("os_family", "Unknown"))
+    dev_mod = data.deviceModel if data.deviceModel is not None else (data.device_model or row_dict.get("device_model", ""))
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    first_disc = data.firstDiscovered if data.firstDiscovered is not None else (data.first_discovered or row_dict.get("first_discovered", now_str))
+    last_seen = data.lastSeen if data.lastSeen is not None else (data.last_seen or row_dict.get("last_seen", now_str))
             
-    update_ip_db(ip, final_hostname, data.status, tag, mac, data.notes or "", svc_list, final_source, scanned)
+    update_ip_db(
+        ip, final_hostname, data.status, tag, mac, data.notes or "", svc_list,
+        final_source, scanned, lat, os_fam, dev_mod, first_disc, last_seen
+    )
     return {"status": "success", "ip": ip}
 
 
@@ -323,6 +350,8 @@ async def perform_background_scan():
             if item["status"] == "Active":
                 ip = item["ip"]
                 row = conn.execute("SELECT * FROM ips WHERE ip=?", (ip,)).fetchone()
+                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
                 if row:
                     existing_services = json.loads(row["services"] or "[]")
                     existing_ports = {s["port"] for s in existing_services}
@@ -336,8 +365,9 @@ async def perform_background_scan():
                                     s["name"] = new_svc["name"]
                                     s["url"] = new_svc["url"]
 
-                    row_host = (row["hostname"] or "").strip()
-                    row_source = dict(row).get("hostname_source", "") or ""
+                    row_dict = dict(row)
+                    row_host = (row_dict.get("hostname") or "").strip()
+                    row_source = row_dict.get("hostname_source", "") or ""
                     item_host = (item.get("hostname", "") or "").strip()
                     item_source = item.get("hostname_source", "") or ""
                     scanned_host = item.get("scanned_hostname", item_host)
@@ -356,11 +386,11 @@ async def perform_background_scan():
                         final_hostname = item_host or f"host-{ip.split('.')[-1]}"
                         final_source = item_source or "Fallback"
 
-                    row_mac = (row["mac_address"] or "").strip()
+                    row_mac = (row_dict.get("mac_address") or "").strip()
                     item_mac = (item.get("mac_address", "") or "").strip()
                     final_mac = item_mac if item_mac else row_mac
 
-                    row_type = row["type_tag"] or "Unassigned"
+                    row_type = row_dict.get("type_tag") or "Unassigned"
                     item_type = item.get("type_tag", "Physical Hardware")
 
                     if row_type in ["Unassigned", "Physical Hardware"] and item_type != "Unassigned":
@@ -370,14 +400,28 @@ async def perform_background_scan():
                     else:
                         final_type = row_type
 
+                    first_disc = row_dict.get("first_discovered") or now_str
+                    last_seen = now_str
+                    lat = item.get("latency_ms", 0.0)
+                    os_fam = item.get("os_family", "Unknown")
+                    dev_mod = item.get("device_model") or row_dict.get("device_model", "")
+
                     conn.execute(
-                        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
-                        (final_hostname, final_source, scanned_host, final_type, final_mac, json.dumps(existing_services), ip)
+                        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status='Active', type_tag=?, mac_address=?, services=?, latency_ms=?, os_family=?, device_model=?, first_discovered=?, last_seen=? WHERE ip=?",
+                        (final_hostname, final_source, scanned_host, final_type, final_mac, json.dumps(existing_services), lat, os_fam, dev_mod, first_disc, last_seen, ip)
                     )
                 else:
+                    first_disc = now_str
+                    last_seen = now_str
                     conn.execute(
-                        "INSERT INTO ips (ip, hostname, hostname_source, scanned_hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, 'Active', ?, '', '', ?)",
-                        (ip, item["hostname"], item.get("hostname_source", "Fallback"), item.get("scanned_hostname", item["hostname"]), item["type_tag"], json.dumps(item["services"]))
+                        "INSERT INTO ips (ip, hostname, hostname_source, scanned_hostname, status, type_tag, mac_address, notes, services, latency_ms, os_family, device_model, first_discovered, last_seen) VALUES (?, ?, ?, ?, 'Active', ?, '', '', ?, ?, ?, ?, ?, ?)",
+                        (
+                            ip, item["hostname"], item.get("hostname_source", "Fallback"),
+                            item.get("scanned_hostname", item["hostname"]), item["type_tag"],
+                            json.dumps(item["services"]), item.get("latency_ms", 0.0),
+                            item.get("os_family", "Unknown"), item.get("device_model", ""),
+                            first_disc, last_seen
+                        )
                     )
         conn.commit()
         conn.close()

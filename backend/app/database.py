@@ -58,6 +58,11 @@ def init_db():
                 mac_address TEXT,
                 notes TEXT,
                 services TEXT,
+                latency_ms REAL DEFAULT 0.0,
+                os_family TEXT DEFAULT 'Unknown',
+                device_model TEXT DEFAULT '',
+                first_discovered TEXT DEFAULT '',
+                last_seen TEXT DEFAULT '',
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -66,12 +71,22 @@ def init_db():
         # Schema migration check for existing DBs
         cursor.execute("PRAGMA table_info(ips)")
         cols = [col["name"] for col in cursor.fetchall()]
-        if "hostname_source" not in cols:
-            cursor.execute("ALTER TABLE ips ADD COLUMN hostname_source TEXT DEFAULT 'Fallback'")
-            conn.commit()
-        if "scanned_hostname" not in cols:
-            cursor.execute("ALTER TABLE ips ADD COLUMN scanned_hostname TEXT DEFAULT ''")
-            conn.commit()
+        col_defs = {
+            "hostname_source": "TEXT DEFAULT 'Fallback'",
+            "scanned_hostname": "TEXT DEFAULT ''",
+            "latency_ms": "REAL DEFAULT 0.0",
+            "os_family": "TEXT DEFAULT 'Unknown'",
+            "device_model": "TEXT DEFAULT ''",
+            "first_discovered": "TEXT DEFAULT ''",
+            "last_seen": "TEXT DEFAULT ''"
+        }
+        for col_name, col_type in col_defs.items():
+            if col_name not in cols:
+                try:
+                    cursor.execute(f"ALTER TABLE ips ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                except Exception:
+                    pass
 
         cursor.execute("SELECT COUNT(*) FROM ips")
         count = cursor.fetchone()[0]
@@ -162,6 +177,16 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
         record["hostname_source"] = record.get("hostname_source", "Fallback") or "Fallback"
         record["scannedHostname"] = record.get("scanned_hostname", "") or ""
         record["scanned_hostname"] = record.get("scanned_hostname", "") or ""
+        record["latencyMs"] = record.get("latency_ms", 0.0) or 0.0
+        record["latency_ms"] = record.get("latency_ms", 0.0) or 0.0
+        record["osFamily"] = record.get("os_family", "Unknown") or "Unknown"
+        record["os_family"] = record.get("os_family", "Unknown") or "Unknown"
+        record["deviceModel"] = record.get("device_model", "") or ""
+        record["device_model"] = record.get("device_model", "") or ""
+        record["firstDiscovered"] = record.get("first_discovered", "") or ""
+        record["first_discovered"] = record.get("first_discovered", "") or ""
+        record["lastSeen"] = record.get("last_seen", "") or ""
+        record["last_seen"] = record.get("last_seen", "") or ""
         records.append(record)
 
     def _ip_tuple(rec):
@@ -174,14 +199,44 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
     return records
 
 
-def update_ip_db(ip: str, hostname: str, status: str, type_tag: str, mac_address: str, notes: str, services: list, hostname_source: str = "", scanned_hostname: str = "") -> None:
+def update_ip_db(
+    ip: str,
+    hostname: str,
+    status: str,
+    type_tag: str,
+    mac_address: str,
+    notes: str,
+    services: list,
+    hostname_source: str = "",
+    scanned_hostname: str = "",
+    latency_ms: float = 0.0,
+    os_family: str = "Unknown",
+    device_model: str = "",
+    first_discovered: str = "",
+    last_seen: str = ""
+) -> None:
     """
     Updates an IP record in the database.
     """
     conn = get_db_connection()
     conn.execute(
-        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status=?, type_tag=?, mac_address=?, notes=?, services=? WHERE ip=?",
-        (hostname, hostname_source or "Fallback", scanned_hostname or "", status, type_tag, mac_address, notes or "", json.dumps(services), ip)
+        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status=?, type_tag=?, mac_address=?, notes=?, services=?, latency_ms=?, os_family=?, device_model=?, first_discovered=?, last_seen=? WHERE ip=?",
+        (
+            hostname,
+            hostname_source or "Fallback",
+            scanned_hostname or "",
+            status,
+            type_tag,
+            mac_address,
+            notes or "",
+            json.dumps(services),
+            latency_ms or 0.0,
+            os_family or "Unknown",
+            device_model or "",
+            first_discovered or "",
+            last_seen or "",
+            ip
+        )
     )
     conn.commit()
     conn.close()

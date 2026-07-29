@@ -3,6 +3,8 @@ import socket
 import re
 import os
 import struct
+import time
+from datetime import datetime, timezone
 import aiohttp
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -156,14 +158,36 @@ OUI_VENDOR_MAP = {
     "E4:E0:A6": "Samsung Smart TV", "00:1C:62": "LG Smart TV", "A8:23:FE": "LG Smart TV"
 }
 
-async def ping_ip(ip: str) -> bool:
+async def ping_ip(ip: str) -> Tuple[bool, float, int]:
+    t0 = time.perf_counter()
     try:
         cmd = ["ping", "-c", "1", "-W", "1", ip] if os.name != "nt" else ["ping", "-n", "1", "-w", "400", ip]
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        await proc.communicate()
-        return proc.returncode == 0
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        stdout, _ = await proc.communicate()
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        if proc.returncode == 0:
+            output = stdout.decode("utf-8", errors="ignore")
+            time_match = re.search(r'time[=<]([0-9.]+)\s*ms', output, re.I)
+            if time_match:
+                try:
+                    elapsed_ms = float(time_match.group(1))
+                except Exception:
+                    pass
+            ttl = 0
+            ttl_match = re.search(r'ttl=([0-9]+)', output, re.I)
+            if ttl_match:
+                try:
+                    ttl = int(ttl_match.group(1))
+                except Exception:
+                    pass
+            return (True, round(elapsed_ms, 1), ttl)
     except Exception:
-        return False
+        pass
+    return (False, 0.0, 0)
 
 def get_arp_mac(ip: str) -> str:
     try:
@@ -345,25 +369,33 @@ async def query_netbios_hostname(ip: str, timeout: float = 0.5) -> Optional[str]
     except Exception:
         return None
 
-async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout: float = 0.8) -> Optional[str]:
+async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout: float = 0.8) -> Tuple[Optional[str], Optional[str]]:
     upnp_urls = [
         f"http://{ip}:1900/description.xml",
         f"http://{ip}:1900/device-desc.xml",
         f"http://{ip}:8080/description.xml",
         f"http://{ip}:49152/description.xml"
     ]
+    model_found = None
     for url in upnp_urls:
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout), ssl=False) as resp:
                 if resp.status == 200:
                     text = await resp.text(errors='ignore')
+                    model_match = re.search(r'<modelName[^>]*>(.*?)</modelName>', text, re.I)
+                    mfg_match = re.search(r'<manufacturer[^>]*>(.*?)</manufacturer>', text, re.I)
+                    if model_match and model_match.group(1).strip():
+                        m_name = model_match.group(1).strip()
+                        m_mfg = mfg_match.group(1).strip() if (mfg_match and mfg_match.group(1).strip()) else ""
+                        model_found = f"{m_mfg} {m_name}".strip() if (m_mfg and not m_name.lower().startswith(m_mfg.lower())) else m_name
+
                     match = re.search(r'<friendlyName[^>]*>(.*?)</friendlyName>', text, re.I)
                     if match and match.group(1).strip():
                         fname = match.group(1).strip()
                         clean = re.sub(r'[^a-zA-Z0-9\s-]', '', fname).strip()
                         clean = re.sub(r'\s+', '-', clean)
                         if len(clean) >= 2:
-                            return clean
+                            return (clean, model_found)
         except Exception:
             pass
 
@@ -388,16 +420,17 @@ async def query_upnp_ssdp_name(session: aiohttp.ClientSession, ip: str, timeout:
                 if "/" in srv:
                     brand = srv.split("/")[0].strip()
                     if len(brand) >= 2 and brand.lower() not in ["upnp", "http"]:
-                        return brand
+                        return (brand, brand)
         except Exception:
-            return None
+            return (None, None)
         finally:
             sock.close()
 
     try:
-        return await loop.run_in_executor(None, _ssdp_udp)
+        ssdp_res, ssdp_mod = await loop.run_in_executor(None, _ssdp_udp)
+        return (ssdp_res, model_found or ssdp_mod)
     except Exception:
-        return None
+        return (None, model_found)
 
 def lookup_mac_oui(mac: str) -> Optional[str]:
     if not mac:
@@ -531,13 +564,13 @@ async def resolve_hostname_waterfall(
     open_ports: List[int],
     first_title: Optional[str],
     session: aiohttp.ClientSession
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Optional[str]]:
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
             clean = sanitize_hostname(mdns_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "mDNS")
+                return (clean, "mDNS", None)
     except Exception:
         pass
 
@@ -546,16 +579,16 @@ async def resolve_hostname_waterfall(
         if nb_name:
             clean = sanitize_hostname(nb_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "NetBIOS")
+                return (clean, "NetBIOS", None)
     except Exception:
         pass
 
     try:
-        upnp_name = await query_upnp_ssdp_name(session, ip, timeout=0.6)
+        upnp_name, device_model = await query_upnp_ssdp_name(session, ip, timeout=0.6)
         if upnp_name:
             clean = sanitize_hostname(upnp_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "UPnP")
+                return (clean, "UPnP", device_model)
     except Exception:
         pass
 
@@ -563,7 +596,7 @@ async def resolve_hostname_waterfall(
     if derived_name:
         clean = sanitize_hostname(derived_name, is_guess=is_guess)
         if clean and len(clean) >= 2:
-            return (clean, "HTML Title")
+            return (clean, "HTML Title", None)
 
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
@@ -571,7 +604,7 @@ async def resolve_hostname_waterfall(
             clean_dns = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', hostname, flags=re.I)
             clean = sanitize_hostname(clean_dns, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "Reverse DNS")
+                return (clean, "Reverse DNS", None)
     except Exception:
         pass
 
@@ -579,9 +612,27 @@ async def resolve_hostname_waterfall(
     if mac_vendor:
         clean = sanitize_hostname(mac_vendor, is_guess=True)
         if clean and len(clean) >= 2:
-            return (clean, "MAC OUI")
+            return (clean, "MAC OUI", mac_vendor)
 
-    return (f"host-{ip.split('.')[-1]}", "Fallback")
+    return (f"host-{ip.split('.')[-1]}", "Fallback", None)
+
+def estimate_os_family(ttl: int, open_ports: List[int], ip: str, services: List[Dict[str, Any]]) -> str:
+    if 0 < ttl <= 64:
+        return "Linux/macOS"
+    elif 64 < ttl <= 128:
+        return "Windows"
+    elif ttl > 128:
+        return "Network Hardware"
+
+    titles_concat = " ".join([s.get("name", "") for s in services]).lower()
+    if 135 in open_ports or 139 in open_ports or 445 in open_ports or 3389 in open_ports or "windows" in titles_concat:
+        return "Windows"
+    if 22 in open_ports or 8006 in open_ports or 8123 in open_ports or "proxmox" in titles_concat or "linux" in titles_concat:
+        return "Linux/macOS"
+    if ip.endswith(".1") or ip.endswith(".254") or 53 in open_ports or 1900 in open_ports or "router" in titles_concat or "gateway" in titles_concat:
+        return "Network Hardware"
+
+    return "Unknown"
 
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     ports = [s["port"] for s in open_services]
@@ -675,15 +726,21 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 progress_dict["discoveredServices"] += 1
                 progress_dict["log"].append(f"[Discovered] {ip}:{port} -> \"{service_name}\"")
 
-        is_pingable = await ping_ok_task
+        is_pingable, latency_ms, ttl = await ping_ok_task
         mac_addr = await arp_mac_task
 
         is_active = len(open_services) > 0 or is_pingable or bool(mac_addr)
 
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
         if is_active:
-            hostname, hostname_source = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+            hostname, hostname_source, dev_model_waterfall = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+            os_fam = estimate_os_family(ttl, active_ports, ip, open_services)
+            device_model = dev_model_waterfall or lookup_mac_oui(mac_addr) or ""
         else:
-            hostname, hostname_source = "", ""
+            hostname, hostname_source, dev_model_waterfall = "", "", None
+            os_fam = "Unknown"
+            device_model = ""
 
         type_tag = classify_device_type(ip, open_services) if is_active else "Unassigned"
             
@@ -699,7 +756,11 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "type_tag": type_tag,
             "mac_address": mac_addr,
             "services": open_services,
-            "last_seen": "Just now" if is_active else None
+            "latency_ms": latency_ms if is_active else 0.0,
+            "os_family": os_fam if is_active else "Unknown",
+            "device_model": device_model if is_active else "",
+            "first_discovered": now_str if is_active else "",
+            "last_seen": now_str if is_active else ""
         }
 
 async def scan_subnet(subnet_prefix: str = "192.168.2", start: int = 1, end: int = 254, progress_dict: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
