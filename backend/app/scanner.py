@@ -4,7 +4,7 @@ import re
 import os
 import struct
 import aiohttp
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 try:
     from backend.app.display_name_engine import resolve_device_display_name
@@ -531,13 +531,13 @@ async def resolve_hostname_waterfall(
     open_ports: List[int],
     first_title: Optional[str],
     session: aiohttp.ClientSession
-) -> str:
+) -> Tuple[str, str]:
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
             clean = sanitize_hostname(mdns_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return clean
+                return (clean, "mDNS")
     except Exception:
         pass
 
@@ -546,7 +546,7 @@ async def resolve_hostname_waterfall(
         if nb_name:
             clean = sanitize_hostname(nb_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return clean
+                return (clean, "NetBIOS")
     except Exception:
         pass
 
@@ -555,7 +555,7 @@ async def resolve_hostname_waterfall(
         if upnp_name:
             clean = sanitize_hostname(upnp_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return clean
+                return (clean, "UPnP")
     except Exception:
         pass
 
@@ -563,7 +563,7 @@ async def resolve_hostname_waterfall(
     if derived_name:
         clean = sanitize_hostname(derived_name, is_guess=is_guess)
         if clean and len(clean) >= 2:
-            return clean
+            return (clean, "HTML Title")
 
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
@@ -571,7 +571,7 @@ async def resolve_hostname_waterfall(
             clean_dns = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', hostname, flags=re.I)
             clean = sanitize_hostname(clean_dns, is_guess=False)
             if clean and len(clean) >= 2:
-                return clean
+                return (clean, "Reverse DNS")
     except Exception:
         pass
 
@@ -579,9 +579,9 @@ async def resolve_hostname_waterfall(
     if mac_vendor:
         clean = sanitize_hostname(mac_vendor, is_guess=True)
         if clean and len(clean) >= 2:
-            return clean
+            return (clean, "MAC OUI")
 
-    return f"host-{ip.split('.')[-1]}"
+    return (f"host-{ip.split('.')[-1]}", "Fallback")
 
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     ports = [s["port"] for s in open_services]
@@ -681,9 +681,9 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         is_active = len(open_services) > 0 or is_pingable or bool(mac_addr)
 
         if is_active:
-            hostname = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+            hostname, hostname_source = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
         else:
-            hostname = ""
+            hostname, hostname_source = "", ""
 
         type_tag = classify_device_type(ip, open_services) if is_active else "Unassigned"
             
@@ -694,6 +694,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "ip": ip,
             "status": "Active" if is_active else "Free",
             "hostname": hostname,
+            "hostname_source": hostname_source,
             "type_tag": type_tag,
             "mac_address": mac_addr,
             "services": open_services,

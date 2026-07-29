@@ -166,6 +166,8 @@ class ServiceModel(BaseModel):
 
 class IPUpdateModel(BaseModel):
     hostname: str
+    hostname_source: Optional[str] = ""
+    hostnameSource: Optional[str] = None
     status: str
     type_tag: Optional[str] = "Physical Hardware"
     typeTag: Optional[str] = None
@@ -246,8 +248,9 @@ async def get_subnet():
 async def update_ip(ip: str, data: IPUpdateModel):
     tag = data.typeTag if data.typeTag is not None else (data.type_tag or "Physical Hardware")
     mac = data.macAddress if data.macAddress is not None else (data.mac_address or "")
+    src = data.hostnameSource if data.hostnameSource is not None else (data.hostname_source or "")
     svc_list = [s.dict() for s in data.services]
-    update_ip_db(ip, data.hostname, data.status, tag, mac, data.notes or "", svc_list)
+    update_ip_db(ip, data.hostname, data.status, tag, mac, data.notes or "", svc_list, src)
     return {"status": "success", "ip": ip}
 
 
@@ -288,7 +291,7 @@ async def perform_background_scan():
                     for i in range(1, 255):
                         new_ip = f"{subnet_prefix}.{i}"
                         conn.execute(
-                            "INSERT OR IGNORE INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, '', 'Free', 'Unassigned', '', '', '[]')",
+                            "INSERT OR IGNORE INTO ips (ip, hostname, hostname_source, status, type_tag, mac_address, notes, services) VALUES (?, '', '', 'Free', 'Unassigned', '', '', '[]')",
                             (new_ip,)
                         )
                     conn.commit()
@@ -311,15 +314,20 @@ async def perform_background_scan():
                                     s["url"] = new_svc["url"]
 
                     row_host = (row["hostname"] or "").strip()
+                    row_source = dict(row).get("hostname_source", "") or ""
                     item_host = (item.get("hostname", "") or "").strip()
+                    item_source = item.get("hostname_source", "") or ""
 
                     # Prioritize newly scanned real hostname over existing DB hostname
                     if item_host and not item_host.startswith("host-"):
                         final_hostname = item_host
+                        final_source = item_source
                     elif row_host:
                         final_hostname = row_host
+                        final_source = row_source
                     else:
                         final_hostname = item_host or f"host-{ip.split('.')[-1]}"
+                        final_source = item_source or "Fallback"
 
                     row_mac = (row["mac_address"] or "").strip()
                     item_mac = (item.get("mac_address", "") or "").strip()
@@ -336,13 +344,13 @@ async def perform_background_scan():
                         final_type = row_type
 
                     conn.execute(
-                        "UPDATE ips SET hostname=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
-                        (final_hostname, final_type, final_mac, json.dumps(existing_services), ip)
+                        "UPDATE ips SET hostname=?, hostname_source=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
+                        (final_hostname, final_source, final_type, final_mac, json.dumps(existing_services), ip)
                     )
                 else:
                     conn.execute(
-                        "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, 'Active', ?, '', '', ?)",
-                        (ip, item["hostname"], item["type_tag"], json.dumps(item["services"]))
+                        "INSERT INTO ips (ip, hostname, hostname_source, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, 'Active', ?, '', '', ?)",
+                        (ip, item["hostname"], item.get("hostname_source", ""), item["type_tag"], json.dumps(item["services"]))
                     )
         conn.commit()
         conn.close()

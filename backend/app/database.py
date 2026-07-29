@@ -51,6 +51,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS ips (
                 ip TEXT PRIMARY KEY,
                 hostname TEXT,
+                hostname_source TEXT DEFAULT '',
                 status TEXT,
                 type_tag TEXT,
                 mac_address TEXT,
@@ -61,6 +62,13 @@ def init_db():
         """)
         conn.commit()
 
+        # Schema migration check for existing DBs
+        cursor.execute("PRAGMA table_info(ips)")
+        cols = [col["name"] for col in cursor.fetchall()]
+        if "hostname_source" not in cols:
+            cursor.execute("ALTER TABLE ips ADD COLUMN hostname_source TEXT DEFAULT ''")
+            conn.commit()
+
         cursor.execute("SELECT COUNT(*) FROM ips")
         count = cursor.fetchone()[0]
         if count == 0:
@@ -68,8 +76,8 @@ def init_db():
             for i in range(1, 255):
                 ip = f"{prefix}.{i}"
                 cursor.execute(
-                    "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
+                    "INSERT INTO ips (ip, hostname, hostname_source, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (ip, "", "", "Free", "Unassigned", "", "", json.dumps([]))
                 )
             conn.commit()
         else:
@@ -81,7 +89,7 @@ def init_db():
             )
             placeholders = ','.join('?' * len(mock_hosts))
             cursor.execute(
-                f"UPDATE ips SET hostname='', status='Free', type_tag='Unassigned', mac_address='', notes='', services='[]' WHERE hostname IN ({placeholders})",
+                f"UPDATE ips SET hostname='', hostname_source='', status='Free', type_tag='Unassigned', mac_address='', notes='', services='[]' WHERE hostname IN ({placeholders})",
                 mock_hosts
             )
             conn.commit()
@@ -100,6 +108,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS ips (
                 ip TEXT PRIMARY KEY,
                 hostname TEXT,
+                hostname_source TEXT DEFAULT '',
                 status TEXT,
                 type_tag TEXT,
                 mac_address TEXT,
@@ -112,8 +121,8 @@ def init_db():
         for i in range(1, 255):
             ip = f"{prefix}.{i}"
             cursor.execute(
-                "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
+                "INSERT INTO ips (ip, hostname, hostname_source, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (ip, "", "", "Free", "Unassigned", "", "", json.dumps([]))
             )
         conn.commit()
         conn.close()
@@ -145,6 +154,8 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
         record["services"] = json.loads(record["services"] or "[]")
         record["typeTag"] = record.get("type_tag", "Unassigned")
         record["macAddress"] = record.get("mac_address", "")
+        record["hostnameSource"] = record.get("hostname_source", "")
+        record["hostname_source"] = record.get("hostname_source", "")
         records.append(record)
 
     def _ip_tuple(rec):
@@ -157,14 +168,14 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
     return records
 
 
-def update_ip_db(ip: str, hostname: str, status: str, type_tag: str, mac_address: str, notes: str, services: list) -> None:
+def update_ip_db(ip: str, hostname: str, status: str, type_tag: str, mac_address: str, notes: str, services: list, hostname_source: str = "") -> None:
     """
     Updates an IP record in the database.
     """
     conn = get_db_connection()
     conn.execute(
-        "UPDATE ips SET hostname=?, status=?, type_tag=?, mac_address=?, notes=?, services=? WHERE ip=?",
-        (hostname, status, type_tag, mac_address, notes or "", json.dumps(services), ip)
+        "UPDATE ips SET hostname=?, hostname_source=?, status=?, type_tag=?, mac_address=?, notes=?, services=? WHERE ip=?",
+        (hostname, hostname_source or "", status, type_tag, mac_address, notes or "", json.dumps(services), ip)
     )
     conn.commit()
     conn.close()

@@ -870,9 +870,10 @@
                 if (query) {
                     const matchIp = r.ip.toLowerCase().includes(query);
                     const matchHost = (r.hostname || '').toLowerCase().includes(query);
+                    const matchSource = (r.hostname_source || r.hostnameSource || '').toLowerCase().includes(query);
                     const matchNotes = (r.notes || '').toLowerCase().includes(query);
                     const matchSvc = (r.services || []).some(s => s.name.toLowerCase().includes(query) || String(s.port).includes(query));
-                    return matchIp || matchHost || matchNotes || matchSvc;
+                    return matchIp || matchHost || matchSource || matchNotes || matchSvc;
                 }
                 return true;
             });
@@ -1034,6 +1035,10 @@
                 const statusStyle = r.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' :
                                     r.status === 'Reserved' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-slate-950 text-slate-500 border border-slate-800';
 
+                const hostSource = r.hostname_source || r.hostnameSource || '';
+                const hostSourceBadge = (r.hostname && hostSource) ? `<span class="ml-1.5 inline-flex items-center text-[10px] font-mono font-normal text-slate-400 bg-slate-800/80 border border-slate-700/60 px-1.5 py-0.5 rounded opacity-90 whitespace-nowrap" title="Source: ${hostSource}">· ${hostSource}</span>` : '';
+                const mobileSourceBadge = (r.hostname && hostSource) ? `<span class="text-[10px] text-slate-400 font-normal opacity-80"> · ${hostSource}</span>` : '';
+
                 // --- 1. DESKTOP TABLE ROW WITH UNIFIED EDIT BUTTON ---
                 const tr = document.createElement('tr');
                 tr.className = `h-9 border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors select-none ${
@@ -1051,8 +1056,8 @@
                             <span>${r.ip}</span>
                         </div>
                     </td>
-                    <td class="py-1.5 px-3 font-medium text-slate-200 truncate max-w-[180px]">
-                        ${r.hostname ? r.hostname : '<span class="text-slate-600 font-normal italic">Unassigned</span>'}
+                    <td class="py-1.5 px-3 font-medium text-slate-200 truncate max-w-[280px]">
+                        ${r.hostname ? `<span class="align-middle">${r.hostname}</span>${hostSourceBadge}` : '<span class="text-slate-600 font-normal italic">Unassigned</span>'}
                     </td>
                     <td class="py-1.5 px-3 whitespace-nowrap">
                         <span class="text-[10px] px-2 py-0.5 rounded border ${typeStyle} font-medium">${typeTag}</span>
@@ -1140,8 +1145,8 @@
                                 <span class="text-slate-500 font-bold text-xs">${hasServices ? '►' : ''}</span>
                                 <span>${r.ip}</span>
                             </div>
-                            <div class="text-slate-300 font-medium truncate max-w-[180px] text-right">
-                                ${r.hostname ? r.hostname : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
+                            <div class="text-slate-300 font-medium truncate max-w-[200px] text-right">
+                                ${r.hostname ? `${r.hostname}${mobileSourceBadge}` : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
                             </div>
                         </div>
                     `;
@@ -1152,8 +1157,8 @@
                                 <span class="text-emerald-400 font-bold text-xs">▼</span>
                                 <span>${r.ip}</span>
                             </div>
-                            <div class="text-slate-200 font-semibold truncate max-w-[180px] text-right">
-                                ${r.hostname ? r.hostname : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
+                            <div class="text-slate-200 font-semibold truncate max-w-[200px] text-right">
+                                ${r.hostname ? `${r.hostname}${mobileSourceBadge}` : '<span class="text-slate-600 italic font-normal">Unassigned</span>'}
                             </div>
                         </div>
                         <div class="p-3 space-y-2.5">
