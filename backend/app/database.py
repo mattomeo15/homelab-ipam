@@ -18,11 +18,25 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 def get_db_connection():
     """
-    Returns a SQLite connection with dict-like row factory.
+    Returns a SQLite connection with dict-like row factory and timeout guard.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _get_initial_subnet_prefix() -> str:
+    try:
+        from scanner import get_active_subnet
+        active_subnet = get_active_subnet()
+        if "/" in active_subnet:
+            active_subnet = active_subnet.split("/")[0]
+        parts = active_subnet.split(".")
+        if len(parts) == 4:
+            return f"{parts[0]}.{parts[1]}.{parts[2]}"
+    except Exception:
+        pass
+    return "192.168.2"
 
 
 def init_db():
@@ -50,8 +64,9 @@ def init_db():
         cursor.execute("SELECT COUNT(*) FROM ips")
         count = cursor.fetchone()[0]
         if count == 0:
+            prefix = _get_initial_subnet_prefix()
             for i in range(1, 255):
-                ip = f"192.168.2.{i}"
+                ip = f"{prefix}.{i}"
                 cursor.execute(
                     "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
@@ -93,8 +108,9 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        prefix = _get_initial_subnet_prefix()
         for i in range(1, 255):
-            ip = f"192.168.2.{i}"
+            ip = f"{prefix}.{i}"
             cursor.execute(
                 "INSERT INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (ip, "", "Free", "Unassigned", "", "", json.dumps([]))
@@ -117,10 +133,10 @@ def clear_all_data_db():
 
 def get_all_ips_db() -> List[Dict[str, Any]]:
     """
-    Retrieves all IP records ordered by numeric IP suffix.
+    Retrieves all IP records ordered by numeric IP octets.
     """
     conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM ips ORDER BY CAST(substr(ip, 13) AS INTEGER)").fetchall()
+    rows = conn.execute("SELECT * FROM ips").fetchall()
     conn.close()
 
     records = []
@@ -130,6 +146,14 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
         record["typeTag"] = record.get("type_tag", "Unassigned")
         record["macAddress"] = record.get("mac_address", "")
         records.append(record)
+
+    def _ip_tuple(rec):
+        try:
+            return tuple(int(p) for p in rec["ip"].split("."))
+        except Exception:
+            return (0, 0, 0, 0)
+
+    records.sort(key=_ip_tuple)
     return records
 
 
