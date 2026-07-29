@@ -80,6 +80,47 @@ app = FastAPI(title="IP-Freely", version="1.0.0")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+# Wrap TemplateResponse to seamlessly handle both (name, context) and (request=request, name=name) across Starlette/FastAPI versions
+_orig_template_response = templates.TemplateResponse
+
+def _compat_template_response(*args, **kwargs):
+    req = kwargs.pop("request", None)
+    name = kwargs.pop("name", None)
+    context = kwargs.pop("context", None)
+
+    if not req and len(args) > 0 and isinstance(args[0], Request):
+        req = args[0]
+        args = args[1:]
+
+    if not name and len(args) > 0 and isinstance(args[0], str):
+        name = args[0]
+        args = args[1:]
+
+    if not context and len(args) > 0 and isinstance(args[0], dict):
+        context = args[0]
+
+    if context is None:
+        context = {}
+
+    if req and "request" not in context:
+        context["request"] = req
+
+    if name:
+        try:
+            return _orig_template_response(name, context)
+        except TypeError:
+            pass
+
+    if req and name:
+        try:
+            return _orig_template_response(request=req, name=name, context=context)
+        except TypeError:
+            pass
+
+    return _orig_template_response(*args, **kwargs)
+
+templates.TemplateResponse = _compat_template_response
+
 if os.path.exists(PUBLIC_DIR):
     app.mount("/public", StaticFiles(directory=PUBLIC_DIR), name="public")
 
@@ -217,7 +258,14 @@ async def perform_background_scan():
         return
 
     stats = await get_stats()
-    subnet_prefix = stats.get("subnet", "192.168.2")
+    raw_subnet = stats.get("subnet", "192.168.2")
+    if "/" in raw_subnet:
+        raw_subnet = raw_subnet.split("/")[0]
+    parts = raw_subnet.split(".")
+    if len(parts) >= 3:
+        subnet_prefix = f"{parts[0]}.{parts[1]}.{parts[2]}"
+    else:
+        subnet_prefix = "192.168.2"
 
     scan_progress["scannedCount"] = 0
     scan_progress["total"] = 254
@@ -229,6 +277,23 @@ async def perform_background_scan():
     try:
         discovered = await scan_subnet(subnet_prefix, 1, 254, progress_dict=scan_progress)
         conn = get_db_connection()
+
+        # If DB contains only unassigned/Free placeholder IPs from a default subnet that differs from active subnet, update placeholders
+        active_count = conn.execute("SELECT COUNT(*) FROM ips WHERE status != 'Free'").fetchone()[0]
+        if active_count == 0:
+            existing_ip = conn.execute("SELECT ip FROM ips LIMIT 1").fetchone()
+            if existing_ip:
+                old_prefix = ".".join(existing_ip["ip"].split(".")[:3])
+                if old_prefix != subnet_prefix:
+                    conn.execute("DELETE FROM ips WHERE status = 'Free'")
+                    for i in range(1, 255):
+                        new_ip = f"{subnet_prefix}.{i}"
+                        conn.execute(
+                            "INSERT OR IGNORE INTO ips (ip, hostname, status, type_tag, mac_address, notes, services) VALUES (?, '', 'Free', 'Unassigned', '', '', '[]')",
+                            (new_ip,)
+                        )
+                    conn.commit()
+
         for item in discovered:
             if item["status"] == "Active":
                 ip = item["ip"]

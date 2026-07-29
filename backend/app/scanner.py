@@ -20,20 +20,7 @@ def get_active_subnet(db_ips: Optional[List[str]] = None) -> str:
     if env_subnet and env_subnet.strip():
         return env_subnet.strip()
 
-    # 2. Derive from active IP list if provided
-    if db_ips and len(db_ips) > 0:
-        prefix_counts = {}
-        for ip in db_ips:
-            parts = ip.split(".")
-            if len(parts) == 4:
-                prefix = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
-                prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
-        if prefix_counts:
-            best_prefix = max(prefix_counts, key=prefix_counts.get)
-            if prefix_counts[best_prefix] >= 10:
-                return best_prefix
-
-    # 3. Socket UDP probe to local interface address
+    # 2. Socket UDP probe to detect local system interface network
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.5)
@@ -46,6 +33,19 @@ def get_active_subnet(db_ips: Optional[List[str]] = None) -> str:
                 return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
     except Exception:
         pass
+
+    # 3. Derive from database records if local socket probe is unavailable or restricted
+    if db_ips and len(db_ips) > 0:
+        prefix_counts = {}
+        for ip in db_ips:
+            parts = ip.split(".")
+            if len(parts) == 4:
+                prefix = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+                prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+        if prefix_counts:
+            best_prefix = max(prefix_counts, key=prefix_counts.get)
+            if prefix_counts[best_prefix] >= 10:
+                return best_prefix
 
     # 4. Fallback default
     return "192.168.2.0/24"
