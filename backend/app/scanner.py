@@ -55,42 +55,42 @@ COMMON_PORTS = {
     22: "SSH Shell",
     53: "DNS Resolver",
     80: "HTTP Web UI",
-    81: "Nginx Proxy Manager",
+    81: "Web Service (Port 81)",
     135: "RPC Endpoint",
     137: "NetBIOS Name Service",
     139: "NetBIOS Session",
     443: "HTTPS Web UI",
     445: "SMB / Windows Share",
-    1900: "UPnP / SSDP",
-    3000: "Grafana / Web App",
-    3001: "Uptime Kuma",
+    1900: "UPnP / SSDP Service",
+    3000: "Web Service (Port 3000)",
+    3001: "Web Service (Port 3001)",
     3389: "RDP Remote Desktop",
-    5000: "Docker Registry / Web UI",
-    5001: "Synology DSM / QNAP",
+    5000: "Web Service (Port 5000)",
+    5001: "Web Service (Port 5001)",
     5353: "mDNS / Zeroconf",
     5800: "VNC Web UI",
     5900: "VNC Display",
-    6789: "NZBGet",
+    6789: "Web Service (Port 6789)",
     7000: "AirPlay Service",
-    7860: "AI Web UI",
-    7878: "Radarr",
-    8000: "Web Service",
-    8006: "Proxmox VE Web UI",
-    8008: "Google Cast / Matrix",
-    8009: "Google Cast",
-    8080: "Web UI / Traefik / QNAP",
-    8081: "Web UI / Sabnzbd",
-    8096: "Jellyfin",
-    8123: "Home Assistant",
-    8443: "Secure Web UI / Unifi",
-    8888: "Jupyter / Web UI",
-    8989: "Sonarr",
-    9000: "Portainer CE",
-    9090: "Cockpit / Prometheus",
-    9091: "Transmission Torrent",
-    9696: "Prowlarr",
-    22300: "IP-Freely App",
-    32400: "Plex Media Server",
+    7860: "Web Service (Port 7860)",
+    7878: "Web Service (Port 7878)",
+    8000: "Web Service (Port 8000)",
+    8006: "Web Service (Port 8006)",
+    8008: "Web Service (Port 8008)",
+    8009: "Google Cast Service",
+    8080: "Web Service (Port 8080)",
+    8081: "Web Service (Port 8081)",
+    8096: "Web Service (Port 8096)",
+    8123: "Web Service (Port 8123)",
+    8443: "HTTPS Web UI (Port 8443)",
+    8888: "Web Service (Port 8888)",
+    8989: "Web Service (Port 8989)",
+    9000: "Web Service (Port 9000)",
+    9090: "Web Service (Port 9090)",
+    9091: "Web Service (Port 9091)",
+    9696: "Web Service (Port 9696)",
+    22300: "Web Service (Port 22300)",
+    32400: "Web Service (Port 32400)",
     62078: "Apple Mobile Device Sync"
 }
 
@@ -522,27 +522,6 @@ def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> t
         clean = re.sub(r'\s+', '-', clean)
         if 2 <= len(clean) <= 30:
             return (clean, False)
-
-    if 8123 in open_ports:
-        return ("Home Assistant", True)
-    if 8006 in open_ports:
-        return ("Proxmox VE", True)
-    if 5001 in open_ports:
-        return ("Synology NAS", True)
-    if 32400 in open_ports:
-        return ("Plex Media Server", True)
-    if 8096 in open_ports:
-        return ("Jellyfin", True)
-    if 7878 in open_ports:
-        return ("Radarr", True)
-    if 8989 in open_ports:
-        return ("Sonarr", True)
-    if 9696 in open_ports:
-        return ("Prowlarr", True)
-    if 3001 in open_ports:
-        return ("Uptime Kuma", True)
-    if 9000 in open_ports:
-        return ("Portainer", True)
 
     return (None, False)
 

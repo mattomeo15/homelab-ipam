@@ -176,8 +176,7 @@ class IPUpdateModel(BaseModel):
 
 
 @app.websocket("/ws")
-@app.websocket("/{path:path}")
-async def websocket_endpoint(websocket: WebSocket, path: str = ""):
+async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
