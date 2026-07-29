@@ -695,6 +695,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "status": "Active" if is_active else "Free",
             "hostname": hostname,
             "hostname_source": hostname_source,
+            "scanned_hostname": hostname,
             "type_tag": type_tag,
             "mac_address": mac_addr,
             "services": open_services,

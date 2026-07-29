@@ -51,7 +51,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS ips (
                 ip TEXT PRIMARY KEY,
                 hostname TEXT,
-                hostname_source TEXT DEFAULT '',
+                scanned_hostname TEXT DEFAULT '',
+                hostname_source TEXT DEFAULT 'Fallback',
                 status TEXT,
                 type_tag TEXT,
                 mac_address TEXT,
@@ -66,7 +67,10 @@ def init_db():
         cursor.execute("PRAGMA table_info(ips)")
         cols = [col["name"] for col in cursor.fetchall()]
         if "hostname_source" not in cols:
-            cursor.execute("ALTER TABLE ips ADD COLUMN hostname_source TEXT DEFAULT ''")
+            cursor.execute("ALTER TABLE ips ADD COLUMN hostname_source TEXT DEFAULT 'Fallback'")
+            conn.commit()
+        if "scanned_hostname" not in cols:
+            cursor.execute("ALTER TABLE ips ADD COLUMN scanned_hostname TEXT DEFAULT ''")
             conn.commit()
 
         cursor.execute("SELECT COUNT(*) FROM ips")
@@ -154,8 +158,10 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
         record["services"] = json.loads(record["services"] or "[]")
         record["typeTag"] = record.get("type_tag", "Unassigned")
         record["macAddress"] = record.get("mac_address", "")
-        record["hostnameSource"] = record.get("hostname_source", "")
-        record["hostname_source"] = record.get("hostname_source", "")
+        record["hostnameSource"] = record.get("hostname_source", "Fallback") or "Fallback"
+        record["hostname_source"] = record.get("hostname_source", "Fallback") or "Fallback"
+        record["scannedHostname"] = record.get("scanned_hostname", "") or ""
+        record["scanned_hostname"] = record.get("scanned_hostname", "") or ""
         records.append(record)
 
     def _ip_tuple(rec):
@@ -168,14 +174,14 @@ def get_all_ips_db() -> List[Dict[str, Any]]:
     return records
 
 
-def update_ip_db(ip: str, hostname: str, status: str, type_tag: str, mac_address: str, notes: str, services: list, hostname_source: str = "") -> None:
+def update_ip_db(ip: str, hostname: str, status: str, type_tag: str, mac_address: str, notes: str, services: list, hostname_source: str = "", scanned_hostname: str = "") -> None:
     """
     Updates an IP record in the database.
     """
     conn = get_db_connection()
     conn.execute(
-        "UPDATE ips SET hostname=?, hostname_source=?, status=?, type_tag=?, mac_address=?, notes=?, services=? WHERE ip=?",
-        (hostname, hostname_source or "", status, type_tag, mac_address, notes or "", json.dumps(services), ip)
+        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status=?, type_tag=?, mac_address=?, notes=?, services=? WHERE ip=?",
+        (hostname, hostname_source or "Fallback", scanned_hostname or "", status, type_tag, mac_address, notes or "", json.dumps(services), ip)
     )
     conn.commit()
     conn.close()

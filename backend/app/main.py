@@ -168,6 +168,9 @@ class IPUpdateModel(BaseModel):
     hostname: str
     hostname_source: Optional[str] = ""
     hostnameSource: Optional[str] = None
+    scanned_hostname: Optional[str] = ""
+    scannedHostname: Optional[str] = None
+    reset_hostname: Optional[bool] = False
     status: str
     type_tag: Optional[str] = "Physical Hardware"
     typeTag: Optional[str] = None
@@ -248,9 +251,29 @@ async def get_subnet():
 async def update_ip(ip: str, data: IPUpdateModel):
     tag = data.typeTag if data.typeTag is not None else (data.type_tag or "Physical Hardware")
     mac = data.macAddress if data.macAddress is not None else (data.mac_address or "")
-    src = data.hostnameSource if data.hostnameSource is not None else (data.hostname_source or "")
     svc_list = [s.dict() for s in data.services]
-    update_ip_db(ip, data.hostname, data.status, tag, mac, data.notes or "", svc_list, src)
+    
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM ips WHERE ip=?", (ip,)).fetchone()
+    conn.close()
+    
+    row_dict = dict(row) if row else {}
+    scanned = data.scannedHostname if data.scannedHostname is not None else (data.scanned_hostname or row_dict.get("scanned_hostname", ""))
+    
+    if data.reset_hostname:
+        final_hostname = scanned or f"host-{ip.split('.')[-1]}"
+        final_source = "Fallback"
+    else:
+        final_hostname = data.hostname
+        user_src = data.hostnameSource if data.hostnameSource is not None else (data.hostname_source or "")
+        if user_src and user_src != "Custom":
+            final_source = user_src
+        elif row_dict.get("hostname") != data.hostname:
+            final_source = "Custom"
+        else:
+            final_source = user_src or row_dict.get("hostname_source", "Fallback") or "Fallback"
+            
+    update_ip_db(ip, final_hostname, data.status, tag, mac, data.notes or "", svc_list, final_source, scanned)
     return {"status": "success", "ip": ip}
 
 
@@ -317,14 +340,18 @@ async def perform_background_scan():
                     row_source = dict(row).get("hostname_source", "") or ""
                     item_host = (item.get("hostname", "") or "").strip()
                     item_source = item.get("hostname_source", "") or ""
+                    scanned_host = item.get("scanned_hostname", item_host)
 
-                    # Prioritize newly scanned real hostname over existing DB hostname
-                    if item_host and not item_host.startswith("host-"):
+                    if row_source == "Custom" and row_host:
+                        # Custom naming lock: preserve custom hostname and source
+                        final_hostname = row_host
+                        final_source = "Custom"
+                    elif item_host and not item_host.startswith("host-"):
                         final_hostname = item_host
-                        final_source = item_source
+                        final_source = item_source or "mDNS"
                     elif row_host:
                         final_hostname = row_host
-                        final_source = row_source
+                        final_source = row_source or "Fallback"
                     else:
                         final_hostname = item_host or f"host-{ip.split('.')[-1]}"
                         final_source = item_source or "Fallback"
@@ -344,13 +371,13 @@ async def perform_background_scan():
                         final_type = row_type
 
                     conn.execute(
-                        "UPDATE ips SET hostname=?, hostname_source=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
-                        (final_hostname, final_source, final_type, final_mac, json.dumps(existing_services), ip)
+                        "UPDATE ips SET hostname=?, hostname_source=?, scanned_hostname=?, status='Active', type_tag=?, mac_address=?, services=? WHERE ip=?",
+                        (final_hostname, final_source, scanned_host, final_type, final_mac, json.dumps(existing_services), ip)
                     )
                 else:
                     conn.execute(
-                        "INSERT INTO ips (ip, hostname, hostname_source, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, 'Active', ?, '', '', ?)",
-                        (ip, item["hostname"], item.get("hostname_source", ""), item["type_tag"], json.dumps(item["services"]))
+                        "INSERT INTO ips (ip, hostname, hostname_source, scanned_hostname, status, type_tag, mac_address, notes, services) VALUES (?, ?, ?, ?, 'Active', ?, '', '', ?)",
+                        (ip, item["hostname"], item.get("hostname_source", "Fallback"), item.get("scanned_hostname", item["hostname"]), item["type_tag"], json.dumps(item["services"]))
                     )
         conn.commit()
         conn.close()
