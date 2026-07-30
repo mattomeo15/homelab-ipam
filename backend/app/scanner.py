@@ -564,13 +564,15 @@ async def resolve_hostname_waterfall(
     open_ports: List[int],
     first_title: Optional[str],
     session: aiohttp.ClientSession
-) -> Tuple[str, str, Optional[str]]:
+) -> Tuple[str, str, Optional[str], Optional[str]]:
+    mdns_raw = None
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
+            mdns_raw = mdns_name
             clean = sanitize_hostname(mdns_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "mDNS", None)
+                return (clean, "mDNS", None, mdns_raw)
     except Exception:
         pass
 
@@ -579,16 +581,18 @@ async def resolve_hostname_waterfall(
         if nb_name:
             clean = sanitize_hostname(nb_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "NetBIOS", None)
+                return (clean, "NetBIOS", None, mdns_raw)
     except Exception:
         pass
 
+    upnp_dev_model = None
     try:
         upnp_name, device_model = await query_upnp_ssdp_name(session, ip, timeout=0.6)
         if upnp_name:
+            upnp_dev_model = device_model
             clean = sanitize_hostname(upnp_name, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "UPnP", device_model)
+                return (clean, "UPnP", upnp_dev_model, mdns_raw)
     except Exception:
         pass
 
@@ -596,7 +600,7 @@ async def resolve_hostname_waterfall(
     if derived_name:
         clean = sanitize_hostname(derived_name, is_guess=is_guess)
         if clean and len(clean) >= 2:
-            return (clean, "HTML Title", None)
+            return (clean, "HTML Title", upnp_dev_model, mdns_raw)
 
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
@@ -604,7 +608,7 @@ async def resolve_hostname_waterfall(
             clean_dns = re.sub(r'\.(local|lan|home|home.arpa|domain)\.?$', '', hostname, flags=re.I)
             clean = sanitize_hostname(clean_dns, is_guess=False)
             if clean and len(clean) >= 2:
-                return (clean, "Reverse DNS", None)
+                return (clean, "Reverse DNS", upnp_dev_model, mdns_raw)
     except Exception:
         pass
 
@@ -612,27 +616,95 @@ async def resolve_hostname_waterfall(
     if mac_vendor:
         clean = sanitize_hostname(mac_vendor, is_guess=True)
         if clean and len(clean) >= 2:
-            return (clean, "MAC OUI", mac_vendor)
+            return (clean, "MAC OUI", upnp_dev_model or mac_vendor, mdns_raw)
 
-    return (f"host-{ip.split('.')[-1]}", "Fallback", None)
+    return (f"host-{ip.split('.')[-1]}", "Fallback", upnp_dev_model, mdns_raw)
 
-def estimate_os_family(ttl: int, open_ports: List[int], ip: str, services: List[Dict[str, Any]]) -> str:
+def estimate_os_family(
+    ttl: int,
+    open_ports: List[int],
+    ip: str,
+    services: List[Dict[str, Any]],
+    mac_vendor: str = "",
+    mdns_name: str = "",
+    first_title: Optional[str] = None
+) -> str:
+    titles_concat = (" ".join([s.get("name", "") for s in services]) + " " + (first_title or "") + " " + (mdns_name or "")).lower()
+    vendor_lower = (mac_vendor or "").lower()
+
+    if any(p in open_ports for p in [135, 139, 445, 3389]) or "windows" in titles_concat or "netbios" in titles_concat:
+        return "Windows"
+
+    if "apple" in vendor_lower or 7000 in open_ports or 62078 in open_ports or any(k in titles_concat for k in ["airplay", "bonjour", "apple", "ios", "macos"]):
+        return "macOS / iOS"
+
+    if 22 in open_ports or any(k in titles_concat for k in ["linux", "ubuntu", "debian", "avahi", "raspberry", "arch"]):
+        return "Linux"
+
+    if 8006 in open_ports or 8123 in open_ports or ip.endswith(".1") or ip.endswith(".254") or 53 in open_ports or 1900 in open_ports or any(k in titles_concat for k in ["proxmox", "home assistant", "router", "gateway", "unifi", "openwrt", "pfsense", "opnsense"]):
+        return "Linux / Embedded"
+
     if 0 < ttl <= 64:
-        return "Linux/macOS"
+        return "Linux"
     elif 64 < ttl <= 128:
         return "Windows"
     elif ttl > 128:
-        return "Network Hardware"
+        return "Network Appliance"
 
-    titles_concat = " ".join([s.get("name", "") for s in services]).lower()
-    if 135 in open_ports or 139 in open_ports or 445 in open_ports or 3389 in open_ports or "windows" in titles_concat:
-        return "Windows"
-    if 22 in open_ports or 8006 in open_ports or 8123 in open_ports or "proxmox" in titles_concat or "linux" in titles_concat:
-        return "Linux/macOS"
-    if ip.endswith(".1") or ip.endswith(".254") or 53 in open_ports or 1900 in open_ports or "router" in titles_concat or "gateway" in titles_concat:
-        return "Network Hardware"
+    if len(open_ports) > 0:
+        return "Embedded System"
+    if mac_vendor:
+        return "Network Appliance"
 
-    return "Unknown"
+    return "Embedded System"
+
+def extract_device_model(
+    upnp_model: Optional[str],
+    first_title: Optional[str],
+    mac_vendor: str,
+    mdns_name: Optional[str],
+    open_ports: List[int]
+) -> str:
+    if upnp_model and len(upnp_model.strip()) >= 2:
+        return upnp_model.strip()
+
+    if first_title and len(first_title.strip()) >= 2:
+        cleaned = re.sub(r'[\r\n\t]+', ' ', first_title).strip()
+        cleaned = re.sub(r'^(Welcome to|Index of|Dashboard|Login to|Sign in to)\s+', '', cleaned, flags=re.IGNORECASE)
+        if 2 <= len(cleaned) <= 50:
+            return cleaned
+
+    if mdns_name and len(mdns_name.strip()) >= 2:
+        clean_mdns = re.sub(r'\.(local|lan|home|home.arpa)$', '', mdns_name, flags=re.I)
+        if 2 <= len(clean_mdns) <= 40:
+            return clean_mdns.replace('-', ' ').replace('_', ' ').title()
+
+    if 8006 in open_ports:
+        return "Proxmox VE Node"
+    if 8123 in open_ports:
+        return "Home Assistant Server"
+
+    if mac_vendor:
+        v_lower = mac_vendor.lower()
+        if "apple" in v_lower:
+            return "Apple Hardware"
+        if "raspberry" in v_lower:
+            return "Raspberry Pi Foundation"
+        if "ubiquiti" in v_lower or "unifi" in v_lower:
+            return "Ubiquiti Network Device"
+        if "synology" in v_lower:
+            return "Synology NAS Device"
+        if "qnap" in v_lower:
+            return "QNAP NAS Device"
+        if "amazon" in v_lower:
+            return "Amazon Smart Device"
+        if "espressif" in v_lower:
+            return "Espressif IoT Node"
+        if "google" in v_lower:
+            return "Google Smart Hardware"
+        return mac_vendor
+
+    return "Generic Network Device"
 
 def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     ports = [s["port"] for s in open_services]
@@ -671,15 +743,18 @@ async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) ->
         pass
     return None
 
-async def check_port(ip: str, port: int, timeout: float = 0.8) -> bool:
+async def check_port(ip: str, port: int, timeout: float = 0.8) -> Tuple[bool, float]:
+    t0 = time.perf_counter()
     try:
         conn = asyncio.open_connection(ip, port)
         _, writer = await asyncio.wait_for(conn, timeout=timeout)
+        t1 = time.perf_counter()
         writer.close()
         await writer.wait_closed()
-        return True
+        latency_ms = round((t1 - t0) * 1000.0, 1)
+        return (True, max(0.1, latency_ms))
     except Exception:
-        return False
+        return (False, 0.0)
 
 async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.Semaphore, progress_dict: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     async with sem:
@@ -694,9 +769,11 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         results = await asyncio.gather(*port_tasks)
         
         active_ports = []
-        for port, is_open in zip(COMMON_PORTS.keys(), results):
+        tcp_latencies = []
+        for port, (is_open, port_lat) in zip(COMMON_PORTS.keys(), results):
             if is_open:
                 active_ports.append(port)
+                tcp_latencies.append(port_lat)
                 
         first_title = None
         priority_web_ports = [p for p in [8123, 8006, 5001, 8080, 443, 80, 3001, 3000] if p in active_ports]
@@ -726,19 +803,29 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 progress_dict["discoveredServices"] += 1
                 progress_dict["log"].append(f"[Discovered] {ip}:{port} -> \"{service_name}\"")
 
-        is_pingable, latency_ms, ttl = await ping_ok_task
+        is_pingable, ping_latency_ms, ttl = await ping_ok_task
         mac_addr = await arp_mac_task
 
         is_active = len(open_services) > 0 or is_pingable or bool(mac_addr)
 
+        if is_pingable and ping_latency_ms > 0:
+            measured_latency = max(0.1, round(ping_latency_ms, 1))
+        elif len(tcp_latencies) > 0:
+            measured_latency = max(0.1, round(min(tcp_latencies), 1))
+        elif is_active:
+            measured_latency = 0.1
+        else:
+            measured_latency = 0.0
+
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
         if is_active:
-            hostname, hostname_source, dev_model_waterfall = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
-            os_fam = estimate_os_family(ttl, active_ports, ip, open_services)
-            device_model = dev_model_waterfall or lookup_mac_oui(mac_addr) or ""
+            hostname, hostname_source, upnp_dev_model, mdns_raw = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+            mac_vendor = lookup_mac_oui(mac_addr)
+            os_fam = estimate_os_family(ttl, active_ports, ip, open_services, mac_vendor=mac_vendor, mdns_name=mdns_raw or "", first_title=first_title)
+            device_model = extract_device_model(upnp_dev_model, first_title, mac_vendor, mdns_raw, active_ports)
         else:
-            hostname, hostname_source, dev_model_waterfall = "", "", None
+            hostname, hostname_source, upnp_dev_model, mdns_raw = "", "", None, None
             os_fam = "Unknown"
             device_model = ""
 
@@ -756,9 +843,9 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
             "type_tag": type_tag,
             "mac_address": mac_addr,
             "services": open_services,
-            "latency_ms": latency_ms if is_active else 0.0,
-            "os_family": os_fam if is_active else "Unknown",
-            "device_model": device_model if is_active else "",
+            "latency_ms": measured_latency,
+            "os_family": os_fam,
+            "device_model": device_model,
             "first_discovered": now_str if is_active else "",
             "last_seen": now_str if is_active else ""
         }
