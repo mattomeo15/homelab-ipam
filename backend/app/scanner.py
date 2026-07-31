@@ -817,7 +817,10 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         else:
             measured_latency = 0.0
 
-        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if is_active:
             hostname, hostname_source, upnp_dev_model, mdns_raw = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
