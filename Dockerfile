@@ -35,9 +35,12 @@ COPY backend/app /app/backend/app
 COPY frontend/public /app/frontend/public
 COPY frontend/templates /app/frontend/templates
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 VOLUME ["/app/backend/data"]
 
 EXPOSE 8000
 
-# Run uvicorn via python module
-CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/entrypoint.sh"]
