@@ -419,10 +419,6 @@
             </div>
 
             <div class="flex items-center space-x-2 hidden xl:flex self-center px-1 flex-shrink-0">
-                <button onclick="openNamingGuideModal()" class="inline-flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 border border-slate-700 text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors shadow-sm">
-                    <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span>Naming Guide</span>
-                </button>
                 <span id="resultsCount" class="text-[10px] text-slate-500 font-mono">Showing 254 IPs</span>
             </div>
         </div>
@@ -666,14 +662,6 @@
         let sortKey = 'ip'; // 'ip', 'name', 'source', 'type', 'ports'
         let sortDir = 'asc'; // 'asc', 'desc'
         let editModalScannedHost = '';
-
-        function openNamingGuideModal() {
-            document.getElementById('namingGuideModal').classList.remove('hidden');
-        }
-
-        function closeNamingGuideModal() {
-            document.getElementById('namingGuideModal').classList.add('hidden');
-        }
 
         function getSourceBadgeHtml(source, hostname) {
             if (!hostname) return '<span class="text-slate-600 font-mono text-[10px]">-</span>';
