@@ -362,9 +362,11 @@ async def perform_background_scan():
                             existing_services.append(new_svc)
                         else:
                             for s in existing_services:
-                                if s["port"] == new_svc["port"] and new_svc.get("title_detected"):
+                                if s["port"] == new_svc["port"]:
                                     s["name"] = new_svc["name"]
                                     s["url"] = new_svc["url"]
+                                    s["protocol"] = new_svc.get("protocol", s.get("protocol", "http"))
+                                    s["title_detected"] = new_svc.get("title_detected", False)
 
                     row_dict = dict(row)
                     row_host = (row_dict.get("hostname") or "").strip()

@@ -112,6 +112,28 @@ def init_db():
                 mock_hosts
             )
             conn.commit()
+
+            # Clean up legacy hardcoded service names in existing DB records
+            cursor.execute("SELECT ip, services FROM ips WHERE services LIKE '%Web Service%' OR services LIKE '%Portainer%'")
+            rows_to_clean = cursor.fetchall()
+            for r in rows_to_clean:
+                ip_val = r["ip"]
+                svcs = json.loads(r["services"] or "[]")
+                modified = False
+                for s in svcs:
+                    s_name = s.get("name", "")
+                    if "Portainer / Web Service" in s_name or "Web Service (Port" in s_name:
+                        port = s.get("port")
+                        proto = s.get("protocol", "http")
+                        if proto == "https" or port in [443, 8443, 9443, 8006, 5001]:
+                            s["name"] = "HTTPS Service"
+                        else:
+                            s["name"] = "HTTP Service"
+                        s["title_detected"] = False
+                        modified = True
+                if modified:
+                    cursor.execute("UPDATE ips SET services=? WHERE ip=?", (json.dumps(svcs), ip_val))
+            conn.commit()
         conn.close()
     except sqlite3.DatabaseError as e:
         print(f"Database error encountered: {e}. Resetting database...")

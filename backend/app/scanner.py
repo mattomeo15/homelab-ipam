@@ -56,44 +56,44 @@ COMMON_PORTS = {
     21: "FTP Service",
     22: "SSH Shell",
     53: "DNS Resolver",
-    80: "HTTP Web UI",
-    81: "Web Service (Port 81)",
+    80: "HTTP Service",
+    81: "HTTP Service",
     135: "RPC Endpoint",
     137: "NetBIOS Name Service",
     139: "NetBIOS Session",
-    443: "HTTPS Web UI",
+    443: "HTTPS Service",
     445: "SMB / Windows Share",
     1900: "UPnP / SSDP Service",
-    3000: "Web Service (Port 3000)",
-    3001: "Web Service (Port 3001)",
+    3000: "HTTP Service",
+    3001: "HTTP Service",
     3389: "RDP Remote Desktop",
-    5000: "Web Service (Port 5000)",
-    5001: "Web Service (Port 5001)",
+    5000: "HTTP Service",
+    5001: "HTTPS Service",
     5353: "mDNS / Zeroconf",
     5800: "VNC Web UI",
     5900: "VNC Display",
-    6789: "Web Service (Port 6789)",
+    6789: "HTTP Service",
     7000: "AirPlay Service",
-    7860: "Web Service (Port 7860)",
-    7878: "Web Service (Port 7878)",
-    8000: "Web Service (Port 8000)",
-    8006: "Web Service (Port 8006)",
-    8008: "Web Service (Port 8008)",
+    7860: "HTTP Service",
+    7878: "HTTP Service",
+    8000: "HTTP Service",
+    8006: "HTTPS Service",
+    8008: "HTTP Service",
     8009: "Google Cast Service",
-    8080: "Web Service (Port 8080)",
-    8081: "Web Service (Port 8081)",
-    8096: "Web Service (Port 8096)",
-    8123: "Web Service (Port 8123)",
-    8443: "HTTPS Web UI (Port 8443)",
-    8888: "Web Service (Port 8888)",
-    8989: "Web Service (Port 8989)",
-    9000: "Portainer / Web Service (Port 9000)",
-    9090: "Web Service (Port 9090)",
-    9091: "Web Service (Port 9091)",
-    9443: "Portainer HTTPS UI (Port 9443)",
-    9696: "Web Service (Port 9696)",
-    22300: "Web Service (Port 22300)",
-    32400: "Web Service (Port 32400)",
+    8080: "HTTP Service",
+    8081: "HTTP Service",
+    8096: "HTTP Service",
+    8123: "HTTP Service",
+    8443: "HTTPS Service",
+    8888: "HTTP Service",
+    8989: "HTTP Service",
+    9000: "HTTP Service",
+    9090: "HTTP Service",
+    9091: "HTTP Service",
+    9443: "HTTPS Service",
+    9696: "HTTP Service",
+    22300: "HTTP Service",
+    32400: "HTTP Service",
     62078: "Apple Mobile Device Sync"
 }
 
@@ -737,22 +737,28 @@ def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
 
     return "Physical Hardware"
 
-async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) -> Optional[str]:
-    protocol = "https" if port in [443, 8443, 9443, 8006, 5001] else "http"
-    url = f"{protocol}://{ip}:{port}"
-    try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.8), ssl=False) as response:
-            if response.status < 500:
-                html = await response.text(errors='ignore')
-                match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
-                if match:
-                    title = match.group(1).strip()
-                    title = re.sub(r'\s+', ' ', title)
-                    if 0 < len(title) < 80:
-                        return title
-    except Exception:
-        pass
-    return None
+async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) -> Tuple[Optional[str], str]:
+    HTTPS_PORTS = {443, 8443, 9443, 8006, 5001}
+    protocols = ["https", "http"] if port in HTTPS_PORTS else ["http", "https"]
+    
+    for proto in protocols:
+        url = f"{proto}://{ip}:{port}"
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.8), ssl=False) as response:
+                if response.status < 500:
+                    text_content = await response.text(errors='ignore')
+                    match = re.search(r'<title[^>]*>(.*?)</title>', text_content, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        raw_title = match.group(1).strip()
+                        raw_title = re.sub(r'\s+', ' ', raw_title)
+                        import html as html_lib
+                        clean_title = html_lib.unescape(raw_title).strip()
+                        if clean_title and len(clean_title) < 100:
+                            return (clean_title, proto)
+                    return (None, proto)
+        except Exception:
+            pass
+    return (None, "https" if port in HTTPS_PORTS else "http")
 
 async def check_port(ip: str, port: int, timeout: float = 0.8) -> Tuple[bool, float]:
     t0 = time.perf_counter()
@@ -789,26 +795,41 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
         first_title = None
         priority_web_ports = [p for p in [9443, 9000, 8123, 8006, 5001, 8080, 8443, 443, 80, 3001, 3000] if p in active_ports]
         other_web_ports = [p for p in active_ports if p in WEB_PORTS and p not in priority_web_ports]
-        ordered_ports = priority_web_ports + other_web_ports
+        non_web_active_ports = [p for p in active_ports if p not in WEB_PORTS]
+        ordered_ports = priority_web_ports + other_web_ports + non_web_active_ports
 
         for port in ordered_ports:
-            default_name = COMMON_PORTS.get(port, f"Service on {port}")
             detected_title = None
+            proto = "https" if port in [443, 8443, 9443, 8006, 5001] else "http"
+            
             if port in WEB_PORTS:
-                detected_title = await fetch_web_title(session, ip, port)
+                detected_title, proto = await fetch_web_title(session, ip, port)
                 if detected_title and not first_title:
                     first_title = detected_title
-                
-            service_name = detected_title if detected_title else default_name
-            protocol = "https" if port in [443, 8443, 9443, 8006, 5001] else "http"
+
+            if detected_title:
+                service_name = detected_title
+                title_detected = True
+            elif port in WEB_PORTS:
+                service_name = "HTTPS Service" if proto == "https" else "HTTP Service"
+                title_detected = False
+            elif port in COMMON_PORTS:
+                service_name = COMMON_PORTS[port]
+                title_detected = False
+            else:
+                service_name = f"TCP Service (Port {port})"
+                title_detected = False
+
+            protocol = proto if port in WEB_PORTS else ("https" if port in [443, 8443, 9443, 8006, 5001] else "http")
+            svc_url = f"{protocol}://{ip}:{port}"
             
             open_services.append({
                 "port": port,
                 "name": service_name,
                 "protocol": protocol,
-                "url": f"{protocol}://{ip}:{port}",
+                "url": svc_url,
                 "auto_discovered": True,
-                "title_detected": bool(detected_title)
+                "title_detected": title_detected
             })
             if progress_dict is not None:
                 progress_dict["discoveredServices"] += 1
