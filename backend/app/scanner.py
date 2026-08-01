@@ -87,16 +87,17 @@ COMMON_PORTS = {
     8443: "HTTPS Web UI (Port 8443)",
     8888: "Web Service (Port 8888)",
     8989: "Web Service (Port 8989)",
-    9000: "Web Service (Port 9000)",
+    9000: "Portainer / Web Service (Port 9000)",
     9090: "Web Service (Port 9090)",
     9091: "Web Service (Port 9091)",
+    9443: "Portainer HTTPS UI (Port 9443)",
     9696: "Web Service (Port 9696)",
     22300: "Web Service (Port 22300)",
     32400: "Web Service (Port 32400)",
     62078: "Apple Mobile Device Sync"
 }
 
-WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9696, 22300, 32400]
+WEB_PORTS = [80, 81, 443, 3000, 3001, 5000, 5001, 5800, 7860, 7878, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 8989, 9000, 9090, 9091, 9443, 9696, 22300, 32400]
 
 OUI_VENDOR_MAP = {
     # Raspberry Pi
@@ -533,7 +534,7 @@ def derive_hostname_from_title(title: Optional[str], open_ports: List[int]) -> t
         if "pi-hole" in t_lower or "pihole" in t_lower:
             return ("pihole-dns", False)
         if "portainer" in t_lower:
-            return ("docker-portainer", False)
+            return ("Portainer-LXC", False)
         if "truenas" in t_lower or "freenas" in t_lower:
             return ("truenas-storage", False)
         if "synology" in t_lower or "dsm" in t_lower:
@@ -566,6 +567,10 @@ async def resolve_hostname_waterfall(
     session: aiohttp.ClientSession
 ) -> Tuple[str, str, Optional[str], Optional[str]]:
     mdns_raw = None
+
+    if first_title and "portainer" in first_title.lower():
+        return ("Portainer-LXC", "HTML Title", "Portainer Management Console", None)
+
     try:
         mdns_name = await query_mdns_hostname(ip, timeout=0.5)
         if mdns_name:
@@ -632,6 +637,9 @@ def estimate_os_family(
     titles_concat = (" ".join([s.get("name", "") for s in services]) + " " + (first_title or "") + " " + (mdns_name or "")).lower()
     vendor_lower = (mac_vendor or "").lower()
 
+    if "portainer" in titles_concat or ((9000 in open_ports or 9443 in open_ports) and first_title and "portainer" in first_title.lower()):
+        return "Linux / Container Host"
+
     if any(p in open_ports for p in [135, 139, 445, 3389]) or "windows" in titles_concat or "netbios" in titles_concat:
         return "Windows"
 
@@ -665,6 +673,9 @@ def extract_device_model(
     mdns_name: Optional[str],
     open_ports: List[int]
 ) -> str:
+    if first_title and "portainer" in first_title.lower():
+        return "Portainer Management Console"
+
     if upnp_model and len(upnp_model.strip()) >= 2:
         return upnp_model.strip()
 
@@ -716,7 +727,7 @@ def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     if 8006 in ports or 9090 in ports or any(k in titles_concat for k in ["proxmox", "pve", "idrac", "ilo", "esxi", "vsphere", "unifi switch", "cockpit"]):
         return "Infrastructure"
         
-    if 9000 in ports or 81 in ports or 8080 in ports or len(open_services) >= 3:
+    if 9000 in ports or 9443 in ports or 81 in ports or 8080 in ports or len(open_services) >= 3 or "portainer" in titles_concat:
         return "Shared/Host Container"
         
     macvlan_ports = {8123, 7878, 8989, 9696, 8096, 32400, 3001, 8081, 9091, 5800}
@@ -727,7 +738,7 @@ def classify_device_type(ip: str, open_services: List[Dict[str, Any]]) -> str:
     return "Physical Hardware"
 
 async def fetch_web_title(session: aiohttp.ClientSession, ip: str, port: int) -> Optional[str]:
-    protocol = "https" if port in [443, 8443, 8006, 5001] else "http"
+    protocol = "https" if port in [443, 8443, 9443, 8006, 5001] else "http"
     url = f"{protocol}://{ip}:{port}"
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.8), ssl=False) as response:
@@ -776,7 +787,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                 tcp_latencies.append(port_lat)
                 
         first_title = None
-        priority_web_ports = [p for p in [8123, 8006, 5001, 8080, 443, 80, 3001, 3000] if p in active_ports]
+        priority_web_ports = [p for p in [9443, 9000, 8123, 8006, 5001, 8080, 8443, 443, 80, 3001, 3000] if p in active_ports]
         other_web_ports = [p for p in active_ports if p in WEB_PORTS and p not in priority_web_ports]
         ordered_ports = priority_web_ports + other_web_ports
 
@@ -789,7 +800,7 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
                     first_title = detected_title
                 
             service_name = detected_title if detected_title else default_name
-            protocol = "https" if port in [443, 8443, 8006, 5001] else "http"
+            protocol = "https" if port in [443, 8443, 9443, 8006, 5001] else "http"
             
             open_services.append({
                 "port": port,
@@ -824,6 +835,9 @@ async def scan_single_ip(ip: str, session: aiohttp.ClientSession, sem: asyncio.S
 
         if is_active:
             hostname, hostname_source, upnp_dev_model, mdns_raw = await resolve_hostname_waterfall(ip, mac_addr, active_ports, first_title, session)
+            if not hostname or hostname.strip().lower() in ["", "unassigned"]:
+                hostname = f"host-{ip.split('.')[-1]}"
+                hostname_source = "Fallback"
             mac_vendor = lookup_mac_oui(mac_addr)
             os_fam = estimate_os_family(ttl, active_ports, ip, open_services, mac_vendor=mac_vendor, mdns_name=mdns_raw or "", first_title=first_title)
             device_model = extract_device_model(upnp_dev_model, first_title, mac_vendor, mdns_raw, active_ports)
